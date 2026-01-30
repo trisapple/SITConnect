@@ -43,7 +43,7 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Login", style = MaterialTheme.typography.headlineLarge)
+        Text(text = "SIT Connect", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
@@ -97,14 +97,6 @@ fun LoginScreen(
                     }
                 }) {
                     Text("Login")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(onClick = {
-                    if (email.isNotBlank() && password.isNotBlank()) {
-                        viewModel.signUp(email, password)
-                    }
-                }) {
-                    Text("Sign Up")
                 }
             }
         }
