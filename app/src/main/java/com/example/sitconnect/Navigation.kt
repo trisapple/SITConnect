@@ -90,6 +90,8 @@ fun SITConnectNavigation(
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
+                    Spacer(modifier = Modifier.weight(1f))
+
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                         label = { Text("Profile") },
@@ -103,7 +105,6 @@ fun SITConnectNavigation(
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
-                    Spacer(modifier = Modifier.weight(1f))
 
                     NavigationDrawerItem(
                         icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout") },
