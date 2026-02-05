@@ -3,7 +3,10 @@ package com.example.sitconnect
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
@@ -87,7 +90,8 @@ fun SITConnectNavigation(
                                 }
                             }
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -102,13 +106,21 @@ fun SITConnectNavigation(
                                 navController.navigate(Screen.Profile.route)
                             }
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
                     )
 
 
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout") },
-                        label = { Text("Logout") },
+                        icon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Logout"
+                            )
+                        },
+                        label = {
+                            Text("Logout")
+                        },
                         selected = false,
                         onClick = {
                             scope.launch {
@@ -119,7 +131,13 @@ fun SITConnectNavigation(
                                 }
                             }
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color(0xFF8B0000),
+                            unselectedTextColor = Color.White,
+                            unselectedIconColor = Color.White
+                        )
                     )
                 }
             }
