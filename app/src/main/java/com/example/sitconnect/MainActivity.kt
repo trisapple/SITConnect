@@ -17,7 +17,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             SITConnectTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    LoginScreen(modifier = Modifier.padding(innerPadding))
+                    SITConnectNavigation(modifier = Modifier.padding(innerPadding))
                 }
             }
         }

@@ -11,7 +11,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,11 +29,19 @@ import com.example.sitconnect.ui.theme.SITConnectTheme
 @Composable
 fun LoginScreen(
     modifier: Modifier = Modifier,
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel = viewModel(),
+    onLoginSuccess: () -> Unit = {}
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val authState by viewModel.authState.collectAsState()
+
+    // Navigate to home when login is successful
+    LaunchedEffect(authState) {
+        if (authState is AuthState.Success) {
+            onLoginSuccess()
+        }
+    }
 
     Column(
         modifier = modifier
