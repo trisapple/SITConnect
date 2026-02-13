@@ -45,10 +45,24 @@ exports.sendWelcomeEmail = functions.auth.user().onCreate((user) => {
   return admin.firestore().collection('users').doc(uid).set({
     email: email,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    name: "Test",
     // ... other initial user data
   }).then(() => {
     console.log('New user document created in Firestore for:', email);
   }).catch((error) => {
     console.error('Error creating user document:', error);
   });
+});
+
+exports.deleteUserData = functions.auth.user().onDelete((user) => {
+  const uid = user.uid;
+  const email = user.email;
+
+  return admin.firestore().collection('users').doc(uid).delete()
+    .then(() => {
+      console.log('User document deleted from Firestore for:', email);
+    })
+    .catch((error) => {
+      console.error('Error deleting user document:', error);
+    });
 });
