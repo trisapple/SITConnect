@@ -33,7 +33,7 @@ fun CalendarScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp, 0.dp)
     ) {
         Text(
             text = "Trimester Calendar",
