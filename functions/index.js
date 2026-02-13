@@ -70,3 +70,73 @@ exports.deleteUserData = functions.auth.user().onDelete((user) => {
       console.error('Error deleting user document:', error);
     });
 });
+
+// Cloud Function to create a new user (admin only)
+exports.createUser = functions.https.onCall(async (data, context) => {
+  // Check if the request is made by an authenticated user
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated to create users.'
+    );
+  }
+
+  // Check if the requesting user is an admin
+  const requestingUserDoc = await admin.firestore()
+    .collection('users')
+    .doc(context.auth.uid)
+    .get();
+
+  if (!requestingUserDoc.exists || !requestingUserDoc.data().roles?.admin) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only administrators can create users.'
+    );
+  }
+
+  // Validate input data
+  const { email, password, name, roles } = data;
+
+  if (!email || !password || !name) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Email, password, and name are required.'
+    );
+  }
+
+  try {
+    // Create the user in Firebase Authentication
+    const userRecord = await admin.auth().createUser({
+      email: email,
+      password: password,
+      emailVerified: false,
+    });
+
+    // Create the user document in Firestore
+    await admin.firestore().collection('users').doc(userRecord.uid).set({
+      email: email,
+      name: name,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      roles: {
+        student: roles?.student || false,
+        lecturer: roles?.lecturer || false,
+        admin: roles?.admin || false,
+      },
+    });
+
+    console.log('Successfully created user:', email);
+
+    return {
+      success: true,
+      uid: userRecord.uid,
+      message: 'User created successfully',
+    };
+  } catch (error) {
+    console.error('Error creating user:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      error.message || 'Failed to create user'
+    );
+  }
+});
+

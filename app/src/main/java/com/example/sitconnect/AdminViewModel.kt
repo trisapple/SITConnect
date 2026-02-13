@@ -3,6 +3,7 @@ package com.example.sitconnect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -29,14 +30,25 @@ sealed class UserUpdateState {
     data class Error(val message: String) : UserUpdateState()
 }
 
+sealed class UserCreateState {
+    object Idle : UserCreateState()
+    object Loading : UserCreateState()
+    object Success : UserCreateState()
+    data class Error(val message: String) : UserCreateState()
+}
+
 class AdminViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val functions: FirebaseFunctions = FirebaseFunctions.getInstance()
 
     private val _usersListState = MutableStateFlow<UsersListState>(UsersListState.Idle)
     val usersListState: StateFlow<UsersListState> = _usersListState
 
     private val _userUpdateState = MutableStateFlow<UserUpdateState>(UserUpdateState.Idle)
     val userUpdateState: StateFlow<UserUpdateState> = _userUpdateState
+
+    private val _userCreateState = MutableStateFlow<UserCreateState>(UserCreateState.Idle)
+    val userCreateState: StateFlow<UserCreateState> = _userCreateState
 
     fun fetchAllUsers() {
         viewModelScope.launch {
@@ -94,6 +106,43 @@ class AdminViewModel : ViewModel() {
 
     fun resetUpdateState() {
         _userUpdateState.value = UserUpdateState.Idle
+    }
+
+    fun createUser(email: String, password: String, name: String, roles: UserRoles) {
+        viewModelScope.launch {
+            try {
+                _userCreateState.value = UserCreateState.Loading
+
+                // Prepare data for Cloud Function
+                val data = hashMapOf(
+                    "email" to email,
+                    "password" to password,
+                    "name" to name,
+                    "roles" to mapOf(
+                        "student" to roles.student,
+                        "lecturer" to roles.lecturer,
+                        "admin" to roles.admin
+                    )
+                )
+
+                // Call the Cloud Function
+                val result = functions
+                    .getHttpsCallable("createUser")
+                    .call(data)
+                    .await()
+
+                _userCreateState.value = UserCreateState.Success
+
+                // Refresh the users list
+                fetchAllUsers()
+            } catch (e: Exception) {
+                _userCreateState.value = UserCreateState.Error(e.message ?: "Failed to create user")
+            }
+        }
+    }
+
+    fun resetCreateState() {
+        _userCreateState.value = UserCreateState.Idle
     }
 }
 

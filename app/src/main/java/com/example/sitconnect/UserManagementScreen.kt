@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
@@ -25,6 +27,11 @@ fun UserManagementScreen(
     val userDataState by userViewModel.userDataState.collectAsState()
     val usersListState by adminViewModel.usersListState.collectAsState()
     val userUpdateState by adminViewModel.userUpdateState.collectAsState()
+    val userCreateState by adminViewModel.userCreateState.collectAsState()
+
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var showSuccessSnackbar by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Fetch current user's data to check admin status
     LaunchedEffect(currentUser?.uid) {
@@ -47,6 +54,25 @@ fun UserManagementScreen(
     LaunchedEffect(userUpdateState) {
         if (userUpdateState is UserUpdateState.Success) {
             adminViewModel.resetUpdateState()
+        }
+    }
+
+    // Handle user creation success/error
+    LaunchedEffect(userCreateState) {
+        when (userCreateState) {
+            is UserCreateState.Success -> {
+                showCreateDialog = false
+                showSuccessSnackbar = true
+                snackbarHostState.showSnackbar("User created successfully!")
+                adminViewModel.resetCreateState()
+            }
+            is UserCreateState.Error -> {
+                snackbarHostState.showSnackbar(
+                    "Error: ${(userCreateState as UserCreateState.Error).message}"
+                )
+                adminViewModel.resetCreateState()
+            }
+            else -> {}
         }
     }
 
@@ -95,63 +121,93 @@ fun UserManagementScreen(
                 }
             }
             else -> {
-                Text(
-                    text = "User Management",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Manage user roles and permissions",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                when (usersListState) {
-                    is UsersListState.Loading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                Scaffold(
+                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+                    floatingActionButton = {
+                        FloatingActionButton(
+                            onClick = { showCreateDialog = true },
+                            containerColor = MaterialTheme.colorScheme.primary
                         ) {
-                            CircularProgressIndicator()
+                            Icon(Icons.Default.Add, contentDescription = "Create User")
                         }
                     }
-                    is UsersListState.Success -> {
-                        val users = (usersListState as UsersListState.Success).users
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(users) { user ->
-                                UserManagementCard(
-                                    user = user,
-                                    currentUserId = currentUser?.uid,
-                                    onUpdateRoles = { roles ->
-                                        adminViewModel.updateUserRoles(user.uid, roles)
-                                    },
-                                    isUpdating = userUpdateState is UserUpdateState.Loading
-                                )
+                ) { paddingValues ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = "User Management",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Manage user roles and permissions",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        when (usersListState) {
+                            is UsersListState.Loading -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+                            is UsersListState.Success -> {
+                                val users = (usersListState as UsersListState.Success).users
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(users) { user ->
+                                        UserManagementCard(
+                                            user = user,
+                                            currentUserId = currentUser?.uid,
+                                            onUpdateRoles = { roles ->
+                                                adminViewModel.updateUserRoles(user.uid, roles)
+                                            },
+                                            isUpdating = userUpdateState is UserUpdateState.Loading
+                                        )
+                                    }
+                                }
+                            }
+                            is UsersListState.Error -> {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Text(
+                                        text = "Error: ${(usersListState as UsersListState.Error).message}",
+                                        modifier = Modifier.padding(16.dp),
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                            is UsersListState.Idle -> {
+                                // Initial state
                             }
                         }
                     }
-                    is UsersListState.Error -> {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Text(
-                                text = "Error: ${(usersListState as UsersListState.Error).message}",
-                                modifier = Modifier.padding(16.dp),
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    }
-                    is UsersListState.Idle -> {
-                        // Initial state
-                    }
+                }
+
+                // Show create user dialog
+                if (showCreateDialog) {
+                    CreateUserDialog(
+                        onDismiss = { showCreateDialog = false },
+                        onConfirm = { email, password, name, roles ->
+                            adminViewModel.createUser(email, password, name, roles)
+                        },
+                        isLoading = userCreateState is UserCreateState.Loading
+                    )
                 }
             }
         }
@@ -338,6 +394,175 @@ fun EditRolesDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun CreateUserDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, String, UserRoles) -> Unit,
+    isLoading: Boolean
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf("") }
+    var isStudent by remember { mutableStateOf(true) }
+    var isLecturer by remember { mutableStateOf(false) }
+    var isAdmin by remember { mutableStateOf(false) }
+
+    var emailError by remember { mutableStateOf(false) }
+    var passwordError by remember { mutableStateOf(false) }
+    var nameError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = {
+            Text("Create New User")
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Enter user details:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        nameError = it.isBlank()
+                    },
+                    label = { Text("Name") },
+                    isError = nameError,
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        emailError = !it.contains("@") || it.isBlank()
+                    },
+                    label = { Text("Email") },
+                    isError = emailError,
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        passwordError = it.length < 6
+                    },
+                    label = { Text("Password") },
+                    isError = passwordError,
+                    enabled = !isLoading,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    supportingText = {
+                        if (passwordError) {
+                            Text("Password must be at least 6 characters")
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Select roles:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isStudent,
+                        onCheckedChange = { isStudent = it },
+                        enabled = !isLoading
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Student")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isLecturer,
+                        onCheckedChange = { isLecturer = it },
+                        enabled = !isLoading
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Lecturer")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = isAdmin,
+                        onCheckedChange = { isAdmin = it },
+                        enabled = !isLoading
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Admin")
+                }
+
+                if (isLoading) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val hasErrors = email.isBlank() || !email.contains("@") ||
+                                   password.length < 6 || name.isBlank()
+
+                    if (!hasErrors) {
+                        onConfirm(
+                            email,
+                            password,
+                            name,
+                            UserRoles(
+                                student = isStudent,
+                                lecturer = isLecturer,
+                                admin = isAdmin
+                            )
+                        )
+                    } else {
+                        emailError = email.isBlank() || !email.contains("@")
+                        passwordError = password.length < 6
+                        nameError = name.isBlank()
+                    }
+                },
+                enabled = !isLoading
+            ) {
+                Text("Create User")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
                 Text("Cancel")
             }
         }
