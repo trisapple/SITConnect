@@ -46,6 +46,11 @@ import com.example.sitconnect.features.mcsubmission.presentation.MCSubmissionScr
 import com.example.sitconnect.features.attendance.presentation.AttendanceScreen
 import com.example.sitconnect.features.facilitybooking.presentation.FacilityBookingScreen
 import com.example.sitconnect.features.messaging.presentation.MessagingScreen
+import com.example.sitconnect.features.classmanagement.presentation.ClassManagementScreen
+import com.example.sitconnect.features.schedule.presentation.ScheduleScreen
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.automirrored.filled.List
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -53,11 +58,16 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Profile : Screen("profile")
     object UserManagement : Screen("user_management")
+    // Student features
     object Calendar : Screen("calendar")
     object MCSubmission : Screen("mc_submission")
     object Attendance : Screen("attendance")
     object FacilityBooking : Screen("facility_booking")
     object Messaging : Screen("messaging")
+    // Lecturer features
+    object ClassManagement : Screen("class_management")
+    object Schedule : Screen("schedule")
+    object RoomBooking : Screen("room_booking")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,7 +86,10 @@ fun SITConnectNavigation(
     val currentRoute = currentBackStackEntry?.destination?.route
 
     val currentUser = (authState as? AuthState.Success)?.user
-    val isAdmin = (userDataState as? UserDataState.Success)?.userData?.roles?.admin == true
+    val userData = (userDataState as? UserDataState.Success)?.userData
+    val isAdmin = userData?.roles?.admin == true
+    val isLecturer = userData?.roles?.lecturer == true
+    val isStudent = userData?.roles?.student == true
 
     // Fetch user data when authenticated to check admin status
     LaunchedEffect(currentUser?.uid) {
@@ -124,79 +137,164 @@ fun SITConnectNavigation(
                         shape = RoundedCornerShape(4.dp)
                     )
 
-                    // Student Features
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.DateRange, contentDescription = "Calendar") },
-                        label = { Text("Trimester Calendar") },
-                        selected = currentRoute == Screen.Calendar.route,
-                        onClick = {
-                            scope.launch {
-                                drawerState.close()
-                                navController.navigate(Screen.Calendar.route)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                    // Student Features - show only for students
+                    if (isStudent) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Student",
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                        )
 
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Create, contentDescription = "MC Submission") },
-                        label = { Text("MC Submission") },
-                        selected = currentRoute == Screen.MCSubmission.route,
-                        onClick = {
-                            scope.launch {
-                                drawerState.close()
-                                navController.navigate(Screen.MCSubmission.route)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.DateRange, contentDescription = "Calendar") },
+                            label = { Text("Trimester Calendar") },
+                            selected = currentRoute == Screen.Calendar.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.Calendar.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
 
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Check, contentDescription = "Attendance") },
-                        label = { Text("Attendance") },
-                        selected = currentRoute == Screen.Attendance.route,
-                        onClick = {
-                            scope.launch {
-                                drawerState.close()
-                                navController.navigate(Screen.Attendance.route)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Create, contentDescription = "MC Submission") },
+                            label = { Text("MC Submission") },
+                            selected = currentRoute == Screen.MCSubmission.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.MCSubmission.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
 
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Place, contentDescription = "Facility Booking") },
-                        label = { Text("Facility Booking") },
-                        selected = currentRoute == Screen.FacilityBooking.route,
-                        onClick = {
-                            scope.launch {
-                                drawerState.close()
-                                navController.navigate(Screen.FacilityBooking.route)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Check, contentDescription = "Attendance") },
+                            label = { Text("Attendance") },
+                            selected = currentRoute == Screen.Attendance.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.Attendance.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
 
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Default.Email, contentDescription = "Messaging") },
-                        label = { Text("Messaging") },
-                        selected = currentRoute == Screen.Messaging.route,
-                        onClick = {
-                            scope.launch {
-                                drawerState.close()
-                                navController.navigate(Screen.Messaging.route)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Place, contentDescription = "Facility Booking") },
+                            label = { Text("Facility Booking") },
+                            selected = currentRoute == Screen.FacilityBooking.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.FacilityBooking.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Email, contentDescription = "Messaging") },
+                            label = { Text("Messaging") },
+                            selected = currentRoute == Screen.Messaging.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.Messaging.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                    }
+
+                    // Lecturer Features - show only for lecturers
+                    if (isLecturer) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Lecturer",
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Class Management") },
+                            label = { Text("Class Management") },
+                            selected = currentRoute == Screen.ClassManagement.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.ClassManagement.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.DateRange, contentDescription = "My Schedule") },
+                            label = { Text("My Schedule") },
+                            selected = currentRoute == Screen.Schedule.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.Schedule.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Place, contentDescription = "Room Booking") },
+                            label = { Text("Room Booking") },
+                            selected = currentRoute == Screen.RoomBooking.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.RoomBooking.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Email, contentDescription = "Messaging") },
+                            label = { Text("Messaging") },
+                            selected = currentRoute == Screen.Messaging.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.Messaging.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                    }
 
                     // Show User Management only for admins
                     if (isAdmin) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Admin",
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp),
+                            style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.error
+                        )
+
                         NavigationDrawerItem(
                             icon = { Icon(Icons.Default.Settings, contentDescription = "User Management") },
                             label = { Text("User Management") },
@@ -274,6 +372,9 @@ fun SITConnectNavigation(
                                     Screen.Attendance.route -> "Attendance"
                                     Screen.FacilityBooking.route -> "Facility Booking"
                                     Screen.Messaging.route -> "Messaging"
+                                    Screen.ClassManagement.route -> "Class Management"
+                                    Screen.Schedule.route -> "My Schedule"
+                                    Screen.RoomBooking.route -> "Room Booking"
                                     else -> "SIT Connect"
                                 }
                             )
@@ -313,6 +414,7 @@ fun SITConnectNavigation(
                     composable(Screen.Home.route) {
                         HomeScreen(
                             viewModel = viewModel,
+                            userViewModel = userViewModel,
                             onLogout = {
                                 navController.navigate(Screen.Login.route) {
                                     popUpTo(0) { inclusive = true }
@@ -355,6 +457,20 @@ fun SITConnectNavigation(
                     composable(Screen.Messaging.route) {
                         MessagingScreen(authViewModel = viewModel)
                     }
+
+                    // Lecturer routes
+                    composable(Screen.ClassManagement.route) {
+                        ClassManagementScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.Schedule.route) {
+                        ScheduleScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.RoomBooking.route) {
+                        // Reuse FacilityBookingScreen but filter for lecturer rooms
+                        FacilityBookingScreen(authViewModel = viewModel)
+                    }
                 }
             }
         }
@@ -379,6 +495,7 @@ fun SITConnectNavigation(
             composable(Screen.Home.route) {
                 HomeScreen(
                     viewModel = viewModel,
+                    userViewModel = userViewModel,
                     onLogout = {
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
@@ -420,6 +537,19 @@ fun SITConnectNavigation(
 
             composable(Screen.Messaging.route) {
                 MessagingScreen(authViewModel = viewModel)
+            }
+
+            // Lecturer routes
+            composable(Screen.ClassManagement.route) {
+                ClassManagementScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.Schedule.route) {
+                ScheduleScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.RoomBooking.route) {
+                FacilityBookingScreen(authViewModel = viewModel)
             }
         }
     }

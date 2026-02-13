@@ -126,6 +126,8 @@ fun FacilityBookingScreen(
                                                 FacilityType.SPORTS_HALL -> "🏸 Sports"
                                                 FacilityType.COMPUTER_LAB -> "💻 Lab"
                                                 FacilityType.STUDY_ROOM -> "📚 Study"
+                                                FacilityType.MEETING_ROOM -> "🤝 Meeting"
+                                                FacilityType.LECTURE_HALL -> "🎓 Lecture"
                                             }
                                         )
                                     }
@@ -252,6 +254,8 @@ fun FacilityCard(
         FacilityType.SPORTS_HALL -> Color(0xFF4CAF50)
         FacilityType.COMPUTER_LAB -> Color(0xFF9C27B0)
         FacilityType.STUDY_ROOM -> Color(0xFFFF9800)
+        FacilityType.MEETING_ROOM -> Color(0xFF009688)
+        FacilityType.LECTURE_HALL -> Color(0xFF3F51B5)
     }
 
     val typeEmoji = when (facility.type) {
@@ -259,6 +263,8 @@ fun FacilityCard(
         FacilityType.SPORTS_HALL -> "🏸"
         FacilityType.COMPUTER_LAB -> "💻"
         FacilityType.STUDY_ROOM -> "📚"
+        FacilityType.MEETING_ROOM -> "🤝"
+        FacilityType.LECTURE_HALL -> "🎓"
     }
 
     val availableCount = facility.availableSlots.count { it.isAvailable }

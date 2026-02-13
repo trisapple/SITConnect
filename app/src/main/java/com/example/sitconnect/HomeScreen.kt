@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -44,13 +45,27 @@ data class FeatureItem(
 fun HomeScreen(
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = viewModel(),
+    userViewModel: UserViewModel = viewModel(),
     onLogout: () -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
     val authState by viewModel.authState.collectAsState()
+    val userDataState by userViewModel.userDataState.collectAsState()
     val user = (authState as? AuthState.Success)?.user
+    val userData = (userDataState as? UserDataState.Success)?.userData
+    val isStudent = userData?.roles?.student == true
+    val isLecturer = userData?.roles?.lecturer == true
+    val isAdmin = userData?.roles?.admin == true
 
-    val features = listOf(
+    // Fetch user data when user changes
+    LaunchedEffect(user?.uid) {
+        user?.uid?.let { uid ->
+            userViewModel.fetchUserData(uid)
+        }
+    }
+
+    // Student features
+    val studentFeatures = listOf(
         FeatureItem(
             title = "Calendar",
             emoji = "📅",
@@ -88,6 +103,65 @@ fun HomeScreen(
         )
     )
 
+    // Lecturer features
+    val lecturerFeatures = listOf(
+        FeatureItem(
+            title = "Class Management",
+            emoji = "👥",
+            description = "View students in your modules",
+            route = Screen.ClassManagement.route,
+            color = Color(0xFF3F51B5)
+        ),
+        FeatureItem(
+            title = "My Schedule",
+            emoji = "📆",
+            description = "View teaching timetable",
+            route = Screen.Schedule.route,
+            color = Color(0xFFFF9800)
+        ),
+        FeatureItem(
+            title = "Room Booking",
+            emoji = "🚪",
+            description = "Book Meeting Rooms & Lecture Halls",
+            route = Screen.RoomBooking.route,
+            color = Color(0xFF009688)
+        ),
+        FeatureItem(
+            title = "Messaging",
+            emoji = "💬",
+            description = "Discuss with students",
+            route = Screen.Messaging.route,
+            color = Color(0xFF795548)
+        )
+    )
+
+    // Admin features
+    val adminFeatures = listOf(
+        FeatureItem(
+            title = "User Management",
+            emoji = "⚙️",
+            description = "Create/Delete accounts",
+            route = Screen.UserManagement.route,
+            color = Color(0xFFF44336)
+        )
+    )
+
+    // Determine which features to show based on role
+    val features = when {
+        isStudent -> studentFeatures
+        isLecturer -> lecturerFeatures
+        isAdmin -> adminFeatures
+        else -> emptyList() // Loading or no role
+    }
+
+    // Determine role text for welcome message
+    val roleText = when {
+        isAdmin -> "Admin"
+        isLecturer -> "Lecturer"
+        isStudent -> "Student"
+        else -> "User"
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -111,9 +185,14 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = user?.email ?: "Student",
+                    text = user?.email ?: roleText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = roleText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
             }
         }

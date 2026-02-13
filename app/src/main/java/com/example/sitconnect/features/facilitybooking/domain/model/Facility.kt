@@ -6,7 +6,9 @@ enum class FacilityType {
     DISCUSSION_ROOM,
     SPORTS_HALL,
     COMPUTER_LAB,
-    STUDY_ROOM
+    STUDY_ROOM,
+    MEETING_ROOM,      // For lecturers - Staff Meeting Rooms
+    LECTURE_HALL       // For lecturers - Lecture Halls
 }
 
 enum class BookingStatus {
