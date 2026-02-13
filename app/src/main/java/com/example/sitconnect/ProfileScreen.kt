@@ -12,10 +12,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -29,10 +31,19 @@ import com.example.sitconnect.ui.theme.SITConnectTheme
 @Composable
 fun ProfileScreen(
     modifier: Modifier = Modifier,
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel = viewModel(),
+    userViewModel: UserViewModel = viewModel()
 ) {
     val authState by viewModel.authState.collectAsState()
     val user = (authState as? AuthState.Success)?.user
+    val userDataState by userViewModel.userDataState.collectAsState()
+
+    // Fetch user data when user is available
+    LaunchedEffect(user?.uid) {
+        user?.uid?.let { uid ->
+            userViewModel.fetchUserData(uid)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -58,23 +69,81 @@ fun ProfileScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                ProfileInfoRow(label = "Email", value = user?.email ?: "Not available")
-                Spacer(modifier = Modifier.height(12.dp))
-                ProfileInfoRow(label = "User ID", value = user?.uid ?: "Not available")
-                Spacer(modifier = Modifier.height(12.dp))
-                ProfileInfoRow(
-                    label = "Email Verified",
-                    value = if (user?.isEmailVerified == true) "Yes" else "No"
-                )
+        when (userDataState) {
+            is UserDataState.Loading -> {
+                CircularProgressIndicator()
+            }
+            is UserDataState.Success -> {
+                val userData = (userDataState as UserDataState.Success).userData
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        ProfileInfoRow(label = "Name", value = userData.name ?: "Not set")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(label = "Email", value = user?.email ?: "Not available")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(label = "User ID", value = user?.uid ?: "Not available")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(
+                            label = "Email Verified",
+                            value = if (user?.isEmailVerified == true) "Yes" else "No"
+                        )
+                    }
+                }
+            }
+            is UserDataState.Error -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Error loading user data: ${(userDataState as UserDataState.Error).message}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(label = "Email", value = user?.email ?: "Not available")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(label = "User ID", value = user?.uid ?: "Not available")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(
+                            label = "Email Verified",
+                            value = if (user?.isEmailVerified == true) "Yes" else "No"
+                        )
+                    }
+                }
+            }
+            is UserDataState.Idle -> {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        ProfileInfoRow(label = "Email", value = user?.email ?: "Not available")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(label = "User ID", value = user?.uid ?: "Not available")
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ProfileInfoRow(
+                            label = "Email Verified",
+                            value = if (user?.isEmailVerified == true) "Yes" else "No"
+                        )
+                    }
+                }
             }
         }
 
