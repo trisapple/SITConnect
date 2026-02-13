@@ -73,15 +73,15 @@ fun LoginScreen(
         when (authState) {
             is AuthState.Loading -> {
                 CircularProgressIndicator()
-            }
-            is AuthState.Success -> {
-                // Show loading while navigating to home
-                CircularProgressIndicator()
                 Text(
-                    text = "Login successful, loading...",
+                    text = "Logging in...",
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+            }
+            is AuthState.Success -> {
+                // Navigation will happen via LaunchedEffect
+                // Don't show loading here to prevent UI lag
             }
             is AuthState.Error -> {
                 Text(

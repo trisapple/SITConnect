@@ -126,7 +126,7 @@ class AdminViewModel : ViewModel() {
                 )
 
                 // Call the Cloud Function
-                val result = functions
+                functions
                     .getHttpsCallable("createUser")
                     .call(data)
                     .await()
@@ -145,4 +145,3 @@ class AdminViewModel : ViewModel() {
         _userCreateState.value = UserCreateState.Idle
     }
 }
-

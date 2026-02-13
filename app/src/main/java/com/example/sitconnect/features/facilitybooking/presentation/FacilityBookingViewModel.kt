@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import java.util.*
 
 sealed class FacilityState {
@@ -51,14 +53,13 @@ class FacilityBookingViewModel : ViewModel() {
             try {
                 _facilityState.value = FacilityState.Loading
 
-                // Fetch facilities first
-                var facilities: List<Facility> = emptyList()
-                try {
+                withTimeout(15000L) { // 15 second timeout
+                    // Fetch facilities from Firestore (seeded via Admin panel)
                     val facilitiesSnapshot = firestore.collection("facilities")
                         .get()
                         .await()
 
-                    facilities = facilitiesSnapshot.documents.mapNotNull { document ->
+                    val facilities = facilitiesSnapshot.documents.mapNotNull { document ->
                         try {
                             val slots = (document.get("availableSlots") as? List<*>)?.mapNotNull { item ->
                                 val map = item as? Map<*, *>
@@ -86,19 +87,14 @@ class FacilityBookingViewModel : ViewModel() {
                             null
                         }
                     }
-                } catch (e: Exception) {
-                    // Facilities fetch failed, will use sample data
-                }
 
-                // Fetch user's bookings separately
-                var bookings: List<FacilityBooking> = emptyList()
-                try {
+                    // Fetch user's bookings
                     val bookingsSnapshot = firestore.collection("facility_bookings")
                         .whereEqualTo("userId", userId)
                         .get()
                         .await()
 
-                    bookings = bookingsSnapshot.documents.mapNotNull { document ->
+                    val bookings = bookingsSnapshot.documents.mapNotNull { document ->
                         try {
                             FacilityBooking(
                                 id = document.id,
@@ -117,21 +113,16 @@ class FacilityBookingViewModel : ViewModel() {
                             null
                         }
                     }.sortedByDescending { it.createdAt }
-                } catch (e: Exception) {
-                    // Bookings fetch failed, will show empty
+
+                    _facilityState.value = FacilityState.Success(
+                        facilities = facilities,
+                        myBookings = bookings
+                    )
                 }
-
-                val finalFacilities = if (facilities.isEmpty()) getSampleFacilities() else facilities
-
-                _facilityState.value = FacilityState.Success(
-                    facilities = finalFacilities,
-                    myBookings = bookings
-                )
+            } catch (e: TimeoutCancellationException) {
+                _facilityState.value = FacilityState.Error("Request timed out. Please check your internet connection.")
             } catch (e: Exception) {
-                _facilityState.value = FacilityState.Success(
-                    facilities = getSampleFacilities(),
-                    myBookings = emptyList()
-                )
+                _facilityState.value = FacilityState.Error(e.message ?: "Failed to fetch facilities")
             }
         }
     }
@@ -147,27 +138,31 @@ class FacilityBookingViewModel : ViewModel() {
             try {
                 _bookingFormState.value = BookingFormState.Loading
 
-                val bookingData = hashMapOf(
-                    "facilityId" to facility.id,
-                    "facilityName" to facility.name,
-                    "facilityType" to facility.type.name,
-                    "userId" to currentUserId,
-                    "userName" to userName,
-                    "bookingDate" to com.google.firebase.Timestamp(bookingDate),
-                    "timeSlot" to timeSlot,
-                    "purpose" to purpose,
-                    "status" to BookingStatus.CONFIRMED.name,
-                    "createdAt" to com.google.firebase.Timestamp.now()
-                )
+                withTimeout(15000L) { // 15 second timeout
+                    val bookingData = hashMapOf(
+                        "facilityId" to facility.id,
+                        "facilityName" to facility.name,
+                        "facilityType" to facility.type.name,
+                        "userId" to currentUserId,
+                        "userName" to userName,
+                        "bookingDate" to com.google.firebase.Timestamp(bookingDate),
+                        "timeSlot" to timeSlot,
+                        "purpose" to purpose,
+                        "status" to BookingStatus.CONFIRMED.name,
+                        "createdAt" to com.google.firebase.Timestamp.now()
+                    )
 
-                firestore.collection("facility_bookings")
-                    .add(bookingData)
-                    .await()
+                    firestore.collection("facility_bookings")
+                        .add(bookingData)
+                        .await()
 
-                _bookingFormState.value = BookingFormState.Success
+                    _bookingFormState.value = BookingFormState.Success
 
-                // Refresh facilities
-                fetchFacilities(currentUserId)
+                    // Refresh facilities
+                    fetchFacilities(currentUserId)
+                }
+            } catch (e: TimeoutCancellationException) {
+                _bookingFormState.value = BookingFormState.Error("Request timed out. Please check your internet connection.")
             } catch (e: Exception) {
                 _bookingFormState.value = BookingFormState.Error(e.message ?: "Failed to book facility")
             }
@@ -191,105 +186,6 @@ class FacilityBookingViewModel : ViewModel() {
 
     fun resetBookingFormState() {
         _bookingFormState.value = BookingFormState.Idle
-    }
-
-    private fun getSampleFacilities(): List<Facility> {
-        val calendar = Calendar.getInstance()
-        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
-
-        // Generate time slots - slots in the past are unavailable
-        val defaultSlots = (9..17).map { hour ->
-            TimeSlot(
-                id = hour.toString(),
-                startTime = String.format("%02d:00", hour),
-                endTime = String.format("%02d:00", hour + 1),
-                isAvailable = hour >= currentHour // Only future slots are available
-            )
-        }
-
-        // Some facilities have random unavailable slots for realism
-        val alternateSlots = defaultSlots.mapIndexed { index, slot ->
-            if (slot.isAvailable && index % 3 == 0) {
-                slot.copy(isAvailable = false) // Some slots are booked
-            } else {
-                slot
-            }
-        }
-
-        return listOf(
-            Facility(
-                id = "dr1",
-                name = "Discussion Room 1A",
-                type = FacilityType.DISCUSSION_ROOM,
-                location = "SIT@NYP Level 1",
-                capacity = 8,
-                amenities = listOf("Whiteboard", "TV Screen", "HDMI Cable", "Aircon"),
-                availableSlots = defaultSlots
-            ),
-            Facility(
-                id = "dr2",
-                name = "Discussion Room 2B",
-                type = FacilityType.DISCUSSION_ROOM,
-                location = "SIT@NYP Level 2",
-                capacity = 6,
-                amenities = listOf("Whiteboard", "Projector", "Aircon"),
-                availableSlots = alternateSlots
-            ),
-            Facility(
-                id = "dr3",
-                name = "Discussion Room 3C",
-                type = FacilityType.DISCUSSION_ROOM,
-                location = "SIT@Dover Level 3",
-                capacity = 10,
-                amenities = listOf("Whiteboard", "TV Screen", "Video Conferencing", "Aircon"),
-                availableSlots = defaultSlots
-            ),
-            Facility(
-                id = "sh1",
-                name = "Badminton Court 1",
-                type = FacilityType.SPORTS_HALL,
-                location = "SIT Sports Complex",
-                capacity = 4,
-                amenities = listOf("Court", "Net", "Shuttlecocks Available"),
-                availableSlots = defaultSlots.filter { it.startTime.substringBefore(":").toInt() in 9..15 }
-            ),
-            Facility(
-                id = "sh2",
-                name = "Basketball Court",
-                type = FacilityType.SPORTS_HALL,
-                location = "SIT Sports Complex",
-                capacity = 10,
-                amenities = listOf("Full Court", "Basketballs Available"),
-                availableSlots = alternateSlots.filter { it.startTime.substringBefore(":").toInt() in 9..15 }
-            ),
-            Facility(
-                id = "sh3",
-                name = "Table Tennis Room",
-                type = FacilityType.SPORTS_HALL,
-                location = "SIT Sports Complex",
-                capacity = 4,
-                amenities = listOf("2 Tables", "Paddles & Balls Available"),
-                availableSlots = defaultSlots
-            ),
-            Facility(
-                id = "sr1",
-                name = "Quiet Study Room A",
-                type = FacilityType.STUDY_ROOM,
-                location = "SIT Library Level 2",
-                capacity = 1,
-                amenities = listOf("Desk", "Power Outlet", "Lamp"),
-                availableSlots = defaultSlots
-            ),
-            Facility(
-                id = "cl1",
-                name = "Computer Lab 4A",
-                type = FacilityType.COMPUTER_LAB,
-                location = "SIT@NYP Level 4",
-                capacity = 30,
-                amenities = listOf("Windows PCs", "Projector", "Printer Access"),
-                availableSlots = defaultSlots.take(4)
-            )
-        )
     }
 }
 

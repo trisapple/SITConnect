@@ -1,5 +1,8 @@
 package com.example.sitconnect.features.messaging.presentation
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,10 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.example.sitconnect.AuthState
 import com.example.sitconnect.AuthViewModel
 import com.example.sitconnect.features.messaging.domain.model.ChatMessage
@@ -270,10 +277,35 @@ fun ChatRoomScreen(
     messagingViewModel: MessagingViewModel,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val messagesState by messagingViewModel.chatMessagesState.collectAsState()
     val sendState by messagingViewModel.sendMessageState.collectAsState()
     var messageText by remember { mutableStateOf("") }
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedFileName by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+
+    // File/image picker launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedFileUri = it
+            // Get file name from URI
+            val cursor = context.contentResolver.query(it, null, null, null, null)
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        selectedFileName = c.getString(nameIndex)
+                    }
+                }
+            }
+            if (selectedFileName.isEmpty()) {
+                selectedFileName = it.lastPathSegment ?: "attachment"
+            }
+        }
+    }
 
     LaunchedEffect(messagesState) {
         if (messagesState is ChatMessagesState.Success) {
@@ -287,6 +319,8 @@ fun ChatRoomScreen(
     LaunchedEffect(sendState) {
         if (sendState is SendMessageState.Success) {
             messageText = ""
+            selectedFileUri = null
+            selectedFileName = ""
             messagingViewModel.resetSendState()
         }
     }
@@ -376,6 +410,31 @@ fun ChatRoomScreen(
             }
         }
 
+        // Selected file preview
+        if (selectedFileUri != null) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📎 $selectedFileName",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        selectedFileUri = null
+                        selectedFileName = ""
+                    }) {
+                        Text("Remove")
+                    }
+                }
+            }
+        }
+
         // Message Input
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant
@@ -386,6 +445,18 @@ fun ChatRoomScreen(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Attachment button
+                IconButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    enabled = sendState !is SendMessageState.Loading
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Attach file",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 OutlinedTextField(
                     value = messageText,
                     onValueChange = { messageText = it },
@@ -401,11 +472,17 @@ fun ChatRoomScreen(
 
                 IconButton(
                     onClick = {
-                        if (messageText.isNotBlank()) {
-                            messagingViewModel.sendMessage(chatRoom.id, messageText.trim())
+                        if (messageText.isNotBlank() || selectedFileUri != null) {
+                            messagingViewModel.sendMessageWithAttachment(
+                                context = context,
+                                chatRoomId = chatRoom.id,
+                                content = messageText.trim(),
+                                fileUri = selectedFileUri,
+                                fileName = selectedFileName
+                            )
                         }
                     },
-                    enabled = messageText.isNotBlank() && sendState !is SendMessageState.Loading
+                    enabled = (messageText.isNotBlank() || selectedFileUri != null) && sendState !is SendMessageState.Loading
                 ) {
                     if (sendState is SendMessageState.Loading) {
                         CircularProgressIndicator(
@@ -416,7 +493,7 @@ fun ChatRoomScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Send",
-                            tint = if (messageText.isNotBlank())
+                            tint = if (messageText.isNotBlank() || selectedFileUri != null)
                                 MaterialTheme.colorScheme.primary
                             else
                                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -464,16 +541,71 @@ fun MessageBubble(
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isCurrentUser)
-                        MaterialTheme.colorScheme.onPrimary
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Display image attachment
+                if (message.attachmentUrl.isNotEmpty() && message.attachmentType == "image") {
+                    AsyncImage(
+                        model = message.attachmentUrl,
+                        contentDescription = "Image attachment",
+                        modifier = Modifier
+                            .widthIn(max = 200.dp)
+                            .heightIn(max = 200.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
 
-                Spacer(modifier = Modifier.height(2.dp))
+                // Display file attachment (non-image)
+                if (message.attachmentUrl.isNotEmpty() && message.attachmentType != "image") {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isCurrentUser)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else
+                                MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when (message.attachmentType) {
+                                    "pdf" -> "📄"
+                                    "video" -> "🎬"
+                                    "audio" -> "🎵"
+                                    else -> "📎"
+                                },
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = message.attachmentName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isCurrentUser)
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                else
+                                    MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                // Display text content if present
+                if (message.content.isNotEmpty() && !message.content.startsWith("📎")) {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isCurrentUser)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
 
                 Text(
                     text = timeFormat.format(message.timestamp),

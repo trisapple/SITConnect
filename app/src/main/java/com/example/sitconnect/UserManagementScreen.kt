@@ -30,7 +30,6 @@ fun UserManagementScreen(
     val userCreateState by adminViewModel.userCreateState.collectAsState()
 
     var showCreateDialog by remember { mutableStateOf(false) }
-    var showSuccessSnackbar by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Fetch current user's data to check admin status
@@ -62,7 +61,6 @@ fun UserManagementScreen(
         when (userCreateState) {
             is UserCreateState.Success -> {
                 showCreateDialog = false
-                showSuccessSnackbar = true
                 snackbarHostState.showSnackbar("User created successfully!")
                 adminViewModel.resetCreateState()
             }
@@ -624,4 +622,5 @@ fun CreateUserDialog(
         }
     )
 }
+
 

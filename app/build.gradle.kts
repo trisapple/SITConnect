@@ -56,11 +56,15 @@ dependencies {
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.functions)
+    implementation(libs.firebase.storage)
     implementation(libs.kotlinx.coroutines.play.services)
 
     // Location Services
     implementation(libs.play.services.location)
     implementation(libs.accompanist.permissions)
+
+    // Image Loading
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

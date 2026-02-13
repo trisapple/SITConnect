@@ -1,6 +1,9 @@
 package com.example.sitconnect.features.mcsubmission.presentation
 
 import android.app.DatePickerDialog
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,6 +36,7 @@ fun MCSubmissionScreen(
     authViewModel: AuthViewModel = viewModel(),
     mcViewModel: MCSubmissionViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val authState by authViewModel.authState.collectAsState()
     val currentUser = (authState as? AuthState.Success)?.user
     val mcSubmissionState by mcViewModel.mcSubmissionState.collectAsState()
@@ -161,14 +165,16 @@ fun MCSubmissionScreen(
             studentId = currentUser?.uid ?: "",
             studentName = currentUser?.email ?: "",
             onDismiss = { showForm = false },
-            onSubmit = { startDate, endDate, reason, fileName ->
+            onSubmit = { startDate, endDate, reason, fileName, fileUri ->
                 mcViewModel.submitMC(
+                    context = context,
                     studentId = currentUser?.uid ?: "",
                     studentName = currentUser?.email ?: "",
                     startDate = startDate,
                     endDate = endDate,
                     reason = reason,
-                    fileName = fileName
+                    fileName = fileName,
+                    fileUri = fileUri
                 )
             },
             isLoading = mcFormState is MCFormState.Loading,
@@ -282,7 +288,7 @@ fun MCSubmissionFormDialog(
     studentId: String,
     studentName: String,
     onDismiss: () -> Unit,
-    onSubmit: (Date, Date, String, String) -> Unit,
+    onSubmit: (Date, Date, String, String, Uri?) -> Unit,
     isLoading: Boolean,
     error: String?
 ) {
@@ -293,7 +299,30 @@ fun MCSubmissionFormDialog(
     var startDate by remember { mutableStateOf(Date()) }
     var endDate by remember { mutableStateOf(Date()) }
     var reason by remember { mutableStateOf("") }
-    var fileName by remember { mutableStateOf("") }
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedFileName by remember { mutableStateOf("") }
+
+    // File picker launcher
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedFileUri = it
+            // Get file name from URI
+            val cursor = context.contentResolver.query(it, null, null, null, null)
+            cursor?.use { c ->
+                if (c.moveToFirst()) {
+                    val nameIndex = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        selectedFileName = c.getString(nameIndex)
+                    }
+                }
+            }
+            if (selectedFileName.isEmpty()) {
+                selectedFileName = it.lastPathSegment ?: "selected_file"
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
@@ -368,18 +397,39 @@ fun MCSubmissionFormDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = fileName,
-                    onValueChange = { fileName = it },
-                    label = { Text("MC File Name (e.g., mc_clinic.pdf)") },
+                // File picker button
+                OutlinedButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Attach File",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (selectedFileName.isEmpty())
+                            "Attach MC Document/Image"
+                        else
+                            "📎 $selectedFileName"
+                    )
+                }
+
+                if (selectedFileUri != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "File selected: $selectedFileName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Note: File upload will be simulated. In production, you would select a file from your device.",
+                    text = "Supported formats: PDF, JPG, PNG",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -387,7 +437,7 @@ fun MCSubmissionFormDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSubmit(startDate, endDate, reason, fileName) },
+                onClick = { onSubmit(startDate, endDate, reason, selectedFileName, selectedFileUri) },
                 enabled = !isLoading && reason.isNotBlank()
             ) {
                 if (isLoading) {
