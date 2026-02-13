@@ -75,15 +75,13 @@ fun LoginScreen(
                 CircularProgressIndicator()
             }
             is AuthState.Success -> {
-                val user = (authState as AuthState.Success).user
+                // Show loading while navigating to home
+                CircularProgressIndicator()
                 Text(
-                    text = "Logged in as: ${user?.email}",
-                    color = MaterialTheme.colorScheme.primary
+                    text = "Login successful, loading...",
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(onClick = { viewModel.logout() }) {
-                    Text("Logout")
-                }
             }
             is AuthState.Error -> {
                 Text(

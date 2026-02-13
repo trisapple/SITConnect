@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -34,8 +36,14 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _authState.value = AuthState.Loading
-                val result = auth.signInWithEmailAndPassword(email, password).await()
-                _authState.value = AuthState.Success(result.user)
+                
+                // Add timeout to prevent hanging indefinitely
+                withTimeout(15000L) { // 15 second timeout
+                    val result = auth.signInWithEmailAndPassword(email, password).await()
+                    _authState.value = AuthState.Success(result.user)
+                }
+            } catch (e: TimeoutCancellationException) {
+                _authState.value = AuthState.Error("Login timed out. Please check your internet connection.")
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Login failed")
             }
@@ -46,8 +54,14 @@ class AuthViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _authState.value = AuthState.Loading
-                val result = auth.createUserWithEmailAndPassword(email, password).await()
-                _authState.value = AuthState.Success(result.user)
+                
+                // Add timeout to prevent hanging indefinitely
+                withTimeout(15000L) { // 15 second timeout
+                    val result = auth.createUserWithEmailAndPassword(email, password).await()
+                    _authState.value = AuthState.Success(result.user)
+                }
+            } catch (e: TimeoutCancellationException) {
+                _authState.value = AuthState.Error("Sign up timed out. Please check your internet connection.")
             } catch (e: Exception) {
                 _authState.value = AuthState.Error(e.message ?: "Sign up failed")
             }

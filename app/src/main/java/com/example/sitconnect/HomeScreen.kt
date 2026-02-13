@@ -66,25 +66,11 @@ fun HomeScreen(
             color = Color(0xFF4CAF50)
         ),
         FeatureItem(
-            title = "Assignments",
-            emoji = "📝",
-            description = "Upload assignments for modules",
-            route = Screen.Assignments.route,
-            color = Color(0xFFFF9800)
-        ),
-        FeatureItem(
             title = "Attendance",
             emoji = "✅",
             description = "Mark attendance via GPS + QR",
             route = Screen.Attendance.route,
             color = Color(0xFF9C27B0)
-        ),
-        FeatureItem(
-            title = "Gradebook",
-            emoji = "📊",
-            description = "View GPA and module grades",
-            route = Screen.Gradebook.route,
-            color = Color(0xFFE91E63)
         ),
         FeatureItem(
             title = "Facility Booking",

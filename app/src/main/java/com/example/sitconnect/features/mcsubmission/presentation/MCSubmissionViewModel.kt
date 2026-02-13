@@ -38,7 +38,7 @@ class MCSubmissionViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _mcSubmissionState.value = MCSubmissionState.Loading
-
+                
                 // Fetch without orderBy to avoid requiring composite index
                 // Sort locally instead
                 val querySnapshot = firestore.collection("mc_submissions")
