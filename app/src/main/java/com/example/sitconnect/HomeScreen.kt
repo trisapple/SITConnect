@@ -1,11 +1,20 @@
 package com.example.sitconnect
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -15,78 +24,183 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.ui.theme.SITConnectTheme
 
+data class FeatureItem(
+    val title: String,
+    val emoji: String,
+    val description: String,
+    val route: String,
+    val color: Color
+)
+
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = viewModel(),
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onNavigate: (String) -> Unit = {}
 ) {
     val authState by viewModel.authState.collectAsState()
     val user = (authState as? AuthState.Success)?.user
 
+    val features = listOf(
+        FeatureItem(
+            title = "Calendar",
+            emoji = "📅",
+            description = "View exam dates, recess weeks, holidays",
+            route = Screen.Calendar.route,
+            color = Color(0xFF2196F3)
+        ),
+        FeatureItem(
+            title = "MC Submission",
+            emoji = "🏥",
+            description = "Submit Medical Certificates",
+            route = Screen.MCSubmission.route,
+            color = Color(0xFF4CAF50)
+        ),
+        FeatureItem(
+            title = "Assignments",
+            emoji = "📝",
+            description = "Upload assignments for modules",
+            route = Screen.Assignments.route,
+            color = Color(0xFFFF9800)
+        ),
+        FeatureItem(
+            title = "Attendance",
+            emoji = "✅",
+            description = "Mark attendance via GPS + QR",
+            route = Screen.Attendance.route,
+            color = Color(0xFF9C27B0)
+        ),
+        FeatureItem(
+            title = "Gradebook",
+            emoji = "📊",
+            description = "View GPA and module grades",
+            route = Screen.Gradebook.route,
+            color = Color(0xFFE91E63)
+        ),
+        FeatureItem(
+            title = "Facility Booking",
+            emoji = "🏢",
+            description = "Book DR & Sports facilities",
+            route = Screen.FacilityBooking.route,
+            color = Color(0xFF00BCD4)
+        ),
+        FeatureItem(
+            title = "Messaging",
+            emoji = "💬",
+            description = "Join group discussions",
+            route = Screen.Messaging.route,
+            color = Color(0xFF795548)
+        )
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(16.dp)
     ) {
-        Text(
-            text = "Welcome to SIT Connect",
-            style = MaterialTheme.typography.headlineLarge,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
+        // Welcome Card
         Card(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             )
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "You are logged in as:",
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = "Welcome to SIT Connect! 👋",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = user?.email ?: "Unknown",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    text = user?.email ?: "Student",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "This is your home page. From here you can access all the features of SIT Connect.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
+            text = "Quick Access",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        Text(
-            text = "Use the menu icon ☰ at the top to navigate",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
+        // Feature Grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            items(features) { feature ->
+                FeatureCard(
+                    feature = feature,
+                    onClick = { onNavigate(feature.route) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FeatureCard(
+    feature: FeatureItem,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(120.dp)
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = feature.color.copy(alpha = 0.15f)
         )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = feature.emoji,
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = feature.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = feature.color,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = feature.description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
+        }
     }
 }
 

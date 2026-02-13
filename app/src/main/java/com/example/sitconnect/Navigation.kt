@@ -12,6 +12,13 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,6 +43,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.sitconnect.features.calendar.presentation.CalendarScreen
+import com.example.sitconnect.features.mcsubmission.presentation.MCSubmissionScreen
+import com.example.sitconnect.features.assignments.presentation.AssignmentsScreen
+import com.example.sitconnect.features.attendance.presentation.AttendanceScreen
+import com.example.sitconnect.features.gradebook.presentation.GradebookScreen
+import com.example.sitconnect.features.facilitybooking.presentation.FacilityBookingScreen
+import com.example.sitconnect.features.messaging.presentation.MessagingScreen
 import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
@@ -43,6 +57,13 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Profile : Screen("profile")
     object UserManagement : Screen("user_management")
+    object Calendar : Screen("calendar")
+    object MCSubmission : Screen("mc_submission")
+    object Assignments : Screen("assignments")
+    object Attendance : Screen("attendance")
+    object Gradebook : Screen("gradebook")
+    object FacilityBooking : Screen("facility_booking")
+    object Messaging : Screen("messaging")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,6 +124,105 @@ fun SITConnectNavigation(
                                 navController.navigate(Screen.Home.route) {
                                     popUpTo(Screen.Home.route) { inclusive = true }
                                 }
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    // Student Features
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.DateRange, contentDescription = "Calendar") },
+                        label = { Text("Trimester Calendar") },
+                        selected = currentRoute == Screen.Calendar.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.Calendar.route)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Create, contentDescription = "MC Submission") },
+                        label = { Text("MC Submission") },
+                        selected = currentRoute == Screen.MCSubmission.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.MCSubmission.route)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Edit, contentDescription = "Assignments") },
+                        label = { Text("Assignment Portal") },
+                        selected = currentRoute == Screen.Assignments.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.Assignments.route)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Check, contentDescription = "Attendance") },
+                        label = { Text("Attendance") },
+                        selected = currentRoute == Screen.Attendance.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.Attendance.route)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Star, contentDescription = "Gradebook") },
+                        label = { Text("Gradebook") },
+                        selected = currentRoute == Screen.Gradebook.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.Gradebook.route)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Place, contentDescription = "Facility Booking") },
+                        label = { Text("Facility Booking") },
+                        selected = currentRoute == Screen.FacilityBooking.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.FacilityBooking.route)
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Email, contentDescription = "Messaging") },
+                        label = { Text("Messaging") },
+                        selected = currentRoute == Screen.Messaging.route,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                navController.navigate(Screen.Messaging.route)
                             }
                         },
                         modifier = Modifier.padding(horizontal = 12.dp),
@@ -183,6 +303,13 @@ fun SITConnectNavigation(
                                     Screen.Home.route -> "Home"
                                     Screen.Profile.route -> "Profile"
                                     Screen.UserManagement.route -> "User Management"
+                                    Screen.Calendar.route -> "Trimester Calendar"
+                                    Screen.MCSubmission.route -> "MC Submission"
+                                    Screen.Assignments.route -> "Assignment Portal"
+                                    Screen.Attendance.route -> "Attendance"
+                                    Screen.Gradebook.route -> "Gradebook"
+                                    Screen.FacilityBooking.route -> "Facility Booking"
+                                    Screen.Messaging.route -> "Messaging"
                                     else -> "SIT Connect"
                                 }
                             )
@@ -226,6 +353,9 @@ fun SITConnectNavigation(
                                 navController.navigate(Screen.Login.route) {
                                     popUpTo(0) { inclusive = true }
                                 }
+                            },
+                            onNavigate = { route ->
+                                navController.navigate(route)
                             }
                         )
                     }
@@ -239,6 +369,34 @@ fun SITConnectNavigation(
                             authViewModel = viewModel,
                             userViewModel = userViewModel
                         )
+                    }
+
+                    composable(Screen.Calendar.route) {
+                        CalendarScreen()
+                    }
+
+                    composable(Screen.MCSubmission.route) {
+                        MCSubmissionScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.Assignments.route) {
+                        AssignmentsScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.Attendance.route) {
+                        AttendanceScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.Gradebook.route) {
+                        GradebookScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.FacilityBooking.route) {
+                        FacilityBookingScreen(authViewModel = viewModel)
+                    }
+
+                    composable(Screen.Messaging.route) {
+                        MessagingScreen(authViewModel = viewModel)
                     }
                 }
             }
@@ -268,6 +426,9 @@ fun SITConnectNavigation(
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onNavigate = { route ->
+                        navController.navigate(route)
                     }
                 )
             }
@@ -281,6 +442,34 @@ fun SITConnectNavigation(
                     authViewModel = viewModel,
                     userViewModel = userViewModel
                 )
+            }
+
+            composable(Screen.Calendar.route) {
+                CalendarScreen()
+            }
+
+            composable(Screen.MCSubmission.route) {
+                MCSubmissionScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.Assignments.route) {
+                AssignmentsScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.Attendance.route) {
+                AttendanceScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.Gradebook.route) {
+                GradebookScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.FacilityBooking.route) {
+                FacilityBookingScreen(authViewModel = viewModel)
+            }
+
+            composable(Screen.Messaging.route) {
+                MessagingScreen(authViewModel = viewModel)
             }
         }
     }
