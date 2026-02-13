@@ -337,6 +337,8 @@ fun UserManagementCard(
         }
     }
 
+    Spacer(modifier = Modifier.height(16.dp))
+
     if (showDialog) {
         EditRolesDialog(
             user = user,
