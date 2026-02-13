@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.sitconnect.features.mcsubmission.domain.model.MCStatus
 import com.example.sitconnect.features.mcsubmission.domain.model.MCSubmission
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -39,9 +38,11 @@ class MCSubmissionViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 _mcSubmissionState.value = MCSubmissionState.Loading
+
+                // Fetch without orderBy to avoid requiring composite index
+                // Sort locally instead
                 val querySnapshot = firestore.collection("mc_submissions")
                     .whereEqualTo("studentId", studentId)
-                    .orderBy("submittedAt", Query.Direction.DESCENDING)
                     .get()
                     .await()
 
@@ -65,7 +66,7 @@ class MCSubmissionViewModel : ViewModel() {
                     } catch (e: Exception) {
                         null
                     }
-                }
+                }.sortedByDescending { it.submittedAt } // Sort locally by submittedAt descending
 
                 _mcSubmissionState.value = MCSubmissionState.Success(submissions)
             } catch (e: Exception) {

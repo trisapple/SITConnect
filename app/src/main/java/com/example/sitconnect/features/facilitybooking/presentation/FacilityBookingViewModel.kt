@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.sitconnect.features.facilitybooking.domain.model.*
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -52,65 +51,74 @@ class FacilityBookingViewModel : ViewModel() {
             try {
                 _facilityState.value = FacilityState.Loading
 
-                // Fetch facilities
-                val facilitiesSnapshot = firestore.collection("facilities")
-                    .get()
-                    .await()
+                // Fetch facilities first
+                var facilities: List<Facility> = emptyList()
+                try {
+                    val facilitiesSnapshot = firestore.collection("facilities")
+                        .get()
+                        .await()
 
-                val facilities = facilitiesSnapshot.documents.mapNotNull { document ->
-                    try {
-                        val slots = (document.get("availableSlots") as? List<*>)?.mapNotNull { item ->
-                            val map = item as? Map<*, *>
-                            if (map != null) {
-                                TimeSlot(
-                                    id = map["id"] as? String ?: "",
-                                    startTime = map["startTime"] as? String ?: "",
-                                    endTime = map["endTime"] as? String ?: "",
-                                    isAvailable = map["isAvailable"] as? Boolean ?: true
-                                )
-                            } else null
-                        } ?: emptyList()
+                    facilities = facilitiesSnapshot.documents.mapNotNull { document ->
+                        try {
+                            val slots = (document.get("availableSlots") as? List<*>)?.mapNotNull { item ->
+                                val map = item as? Map<*, *>
+                                if (map != null) {
+                                    TimeSlot(
+                                        id = map["id"] as? String ?: "",
+                                        startTime = map["startTime"] as? String ?: "",
+                                        endTime = map["endTime"] as? String ?: "",
+                                        isAvailable = map["isAvailable"] as? Boolean ?: true
+                                    )
+                                } else null
+                            } ?: emptyList()
 
-                        Facility(
-                            id = document.id,
-                            name = document.getString("name") ?: "",
-                            type = FacilityType.valueOf(document.getString("type") ?: "DISCUSSION_ROOM"),
-                            location = document.getString("location") ?: "",
-                            capacity = document.getLong("capacity")?.toInt() ?: 0,
-                            amenities = (document.get("amenities") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-                            imageUrl = document.getString("imageUrl") ?: "",
-                            availableSlots = slots
-                        )
-                    } catch (e: Exception) {
-                        null
+                            Facility(
+                                id = document.id,
+                                name = document.getString("name") ?: "",
+                                type = FacilityType.valueOf(document.getString("type") ?: "DISCUSSION_ROOM"),
+                                location = document.getString("location") ?: "",
+                                capacity = document.getLong("capacity")?.toInt() ?: 0,
+                                amenities = (document.get("amenities") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                                imageUrl = document.getString("imageUrl") ?: "",
+                                availableSlots = slots
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
                     }
+                } catch (e: Exception) {
+                    // Facilities fetch failed, will use sample data
                 }
 
-                // Fetch user's bookings
-                val bookingsSnapshot = firestore.collection("facility_bookings")
-                    .whereEqualTo("userId", userId)
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .get()
-                    .await()
+                // Fetch user's bookings separately
+                var bookings: List<FacilityBooking> = emptyList()
+                try {
+                    val bookingsSnapshot = firestore.collection("facility_bookings")
+                        .whereEqualTo("userId", userId)
+                        .get()
+                        .await()
 
-                val bookings = bookingsSnapshot.documents.mapNotNull { document ->
-                    try {
-                        FacilityBooking(
-                            id = document.id,
-                            facilityId = document.getString("facilityId") ?: "",
-                            facilityName = document.getString("facilityName") ?: "",
-                            facilityType = FacilityType.valueOf(document.getString("facilityType") ?: "DISCUSSION_ROOM"),
-                            userId = document.getString("userId") ?: "",
-                            userName = document.getString("userName") ?: "",
-                            bookingDate = document.getTimestamp("bookingDate")?.toDate() ?: Date(),
-                            timeSlot = document.getString("timeSlot") ?: "",
-                            purpose = document.getString("purpose") ?: "",
-                            status = BookingStatus.valueOf(document.getString("status") ?: "PENDING"),
-                            createdAt = document.getTimestamp("createdAt")?.toDate() ?: Date()
-                        )
-                    } catch (e: Exception) {
-                        null
-                    }
+                    bookings = bookingsSnapshot.documents.mapNotNull { document ->
+                        try {
+                            FacilityBooking(
+                                id = document.id,
+                                facilityId = document.getString("facilityId") ?: "",
+                                facilityName = document.getString("facilityName") ?: "",
+                                facilityType = FacilityType.valueOf(document.getString("facilityType") ?: "DISCUSSION_ROOM"),
+                                userId = document.getString("userId") ?: "",
+                                userName = document.getString("userName") ?: "",
+                                bookingDate = document.getTimestamp("bookingDate")?.toDate() ?: Date(),
+                                timeSlot = document.getString("timeSlot") ?: "",
+                                purpose = document.getString("purpose") ?: "",
+                                status = BookingStatus.valueOf(document.getString("status") ?: "PENDING"),
+                                createdAt = document.getTimestamp("createdAt")?.toDate() ?: Date()
+                            )
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }.sortedByDescending { it.createdAt }
+                } catch (e: Exception) {
+                    // Bookings fetch failed, will show empty
                 }
 
                 val finalFacilities = if (facilities.isEmpty()) getSampleFacilities() else facilities
