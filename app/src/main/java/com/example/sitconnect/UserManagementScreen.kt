@@ -76,15 +76,26 @@ fun UserManagementScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        floatingActionButton = {
+            if (isAdmin && userDataState !is UserDataState.Loading) {
+                FloatingActionButton(
+                    onClick = { showCreateDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Create User")
+                }
+            }
+        }
+    ) { paddingValues ->
         when {
             userDataState is UserDataState.Loading -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
@@ -92,7 +103,9 @@ fun UserManagementScreen(
             }
             !isAdmin -> {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
@@ -121,64 +134,80 @@ fun UserManagementScreen(
                 }
             }
             else -> {
-                Scaffold(
-                    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = { showCreateDialog = true },
-                            containerColor = MaterialTheme.colorScheme.primary
+                when (usersListState) {
+                    is UsersListState.Loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Create User")
+                            CircularProgressIndicator()
                         }
                     }
-                ) { paddingValues ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues)
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "User Management",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Manage user roles and permissions",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                    is UsersListState.Success -> {
+                        val users = (usersListState as UsersListState.Success).users
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Header section
+                            item {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "User Management",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Manage user roles and permissions",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
 
-                        when (usersListState) {
-                            is UsersListState.Loading -> {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
+                            // User cards
+                            items(users) { user ->
+                                UserManagementCard(
+                                    user = user,
+                                    currentUserId = currentUser?.uid,
+                                    onUpdateRoles = { roles ->
+                                        adminViewModel.updateUserRoles(user.uid, roles)
+                                    },
+                                    isUpdating = userUpdateState is UserUpdateState.Loading
+                                )
+                            }
+                        }
+                    }
+                    is UsersListState.Error -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            // Header section
+                            item {
+                                Column(
+                                    modifier = Modifier.padding(bottom = 16.dp)
                                 ) {
-                                    CircularProgressIndicator()
+                                    Text(
+                                        text = "User Management",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Manage user roles and permissions",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
-                            is UsersListState.Success -> {
-                                val users = (usersListState as UsersListState.Success).users
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(users) { user ->
-                                        UserManagementCard(
-                                            user = user,
-                                            currentUserId = currentUser?.uid,
-                                            onUpdateRoles = { roles ->
-                                                adminViewModel.updateUserRoles(user.uid, roles)
-                                            },
-                                            isUpdating = userUpdateState is UserUpdateState.Loading
-                                        )
-                                    }
-                                }
-                            }
-                            is UsersListState.Error -> {
+
+                            // Error card
+                            item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(
@@ -192,25 +221,45 @@ fun UserManagementScreen(
                                     )
                                 }
                             }
-                            is UsersListState.Idle -> {
-                                // Initial state
+                        }
+                    }
+                    is UsersListState.Idle -> {
+                        // Initial state - show header only
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            item {
+                                Column {
+                                    Text(
+                                        text = "User Management",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Manage user roles and permissions",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
-
-                // Show create user dialog
-                if (showCreateDialog) {
-                    CreateUserDialog(
-                        onDismiss = { showCreateDialog = false },
-                        onConfirm = { email, password, name, roles ->
-                            adminViewModel.createUser(email, password, name, roles)
-                        },
-                        isLoading = userCreateState is UserCreateState.Loading
-                    )
-                }
             }
         }
+    }
+
+    // Show create user dialog
+    if (showCreateDialog) {
+        CreateUserDialog(
+            onDismiss = { showCreateDialog = false },
+            onConfirm = { email, password, name, roles ->
+                adminViewModel.createUser(email, password, name, roles)
+            },
+            isLoading = userCreateState is UserCreateState.Loading
+        )
     }
 }
 
