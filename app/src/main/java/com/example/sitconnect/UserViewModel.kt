@@ -8,9 +8,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
+data class UserRoles(
+    val student: Boolean = false,
+    val lecturer: Boolean = false,
+    val admin: Boolean = false
+)
+
 data class UserData(
     val name: String? = null,
-    val email: String? = null
+    val email: String? = null,
+    val roles: UserRoles? = null
 )
 
 sealed class UserDataState {
@@ -35,7 +42,15 @@ class UserViewModel : ViewModel() {
                 if (document.exists()) {
                     val name = document.getString("name")
                     val email = document.getString("email")
-                    _userDataState.value = UserDataState.Success(UserData(name = name, email = email))
+                    val rolesMap = document.get("roles") as? Map<*, *>
+                    val roles = rolesMap?.let {
+                        UserRoles(
+                            student = it["student"] as? Boolean ?: false,
+                            lecturer = it["lecturer"] as? Boolean ?: false,
+                            admin = it["admin"] as? Boolean ?: false
+                        )
+                    }
+                    _userDataState.value = UserDataState.Success(UserData(name = name, email = email, roles = roles))
                 } else {
                     _userDataState.value = UserDataState.Error("User data not found")
                 }

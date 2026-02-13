@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,6 +42,7 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object Home : Screen("home")
     object Profile : Screen("profile")
+    object UserManagement : Screen("user_management")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,13 +50,25 @@ sealed class Screen(val route: String) {
 fun SITConnectNavigation(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel = viewModel(),
+    userViewModel: UserViewModel = viewModel()
 ) {
     val authState by viewModel.authState.collectAsState()
+    val userDataState by userViewModel.userDataState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+
+    val currentUser = (authState as? AuthState.Success)?.user
+    val isAdmin = (userDataState as? UserDataState.Success)?.userData?.roles?.admin == true
+
+    // Fetch user data when authenticated to check admin status
+    LaunchedEffect(currentUser?.uid) {
+        currentUser?.uid?.let { uid ->
+            userViewModel.fetchUserData(uid)
+        }
+    }
 
     // Determine start destination based on auth state
     val startDestination = if (authState is AuthState.Success) {
@@ -93,6 +108,23 @@ fun SITConnectNavigation(
                         modifier = Modifier.padding(horizontal = 12.dp),
                         shape = RoundedCornerShape(4.dp)
                     )
+
+                    // Show User Management only for admins
+                    if (isAdmin) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "User Management") },
+                            label = { Text("User Management") },
+                            selected = currentRoute == Screen.UserManagement.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.UserManagement.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.weight(1f))
 
@@ -150,6 +182,7 @@ fun SITConnectNavigation(
                                 when (currentRoute) {
                                     Screen.Home.route -> "Home"
                                     Screen.Profile.route -> "Profile"
+                                    Screen.UserManagement.route -> "User Management"
                                     else -> "SIT Connect"
                                 }
                             )
@@ -200,6 +233,13 @@ fun SITConnectNavigation(
                     composable(Screen.Profile.route) {
                         ProfileScreen(viewModel = viewModel)
                     }
+
+                    composable(Screen.UserManagement.route) {
+                        UserManagementScreen(
+                            authViewModel = viewModel,
+                            userViewModel = userViewModel
+                        )
+                    }
                 }
             }
         }
@@ -234,6 +274,13 @@ fun SITConnectNavigation(
 
             composable(Screen.Profile.route) {
                 ProfileScreen(viewModel = viewModel)
+            }
+
+            composable(Screen.UserManagement.route) {
+                UserManagementScreen(
+                    authViewModel = viewModel,
+                    userViewModel = userViewModel
+                )
             }
         }
     }
