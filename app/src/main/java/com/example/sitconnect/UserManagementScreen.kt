@@ -376,19 +376,25 @@ fun EditRolesDialog(
     onDismiss: () -> Unit,
     onConfirm: (UserRoles) -> Unit
 ) {
-    var isStudent by remember { mutableStateOf(user.roles?.student ?: false) }
-    var isLecturer by remember { mutableStateOf(user.roles?.lecturer ?: false) }
-    var isAdmin by remember { mutableStateOf(user.roles?.admin ?: false) }
+    // Determine initial selected role
+    val initialRole = when {
+        user.roles?.admin == true -> "admin"
+        user.roles?.lecturer == true -> "lecturer"
+        user.roles?.student == true -> "student"
+        else -> "student" // default to student
+    }
+
+    var selectedRole by remember { mutableStateOf(initialRole) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Edit Roles for ${user.name ?: "User"}")
+            Text("Edit Role for ${user.name ?: "User"}")
         },
         text = {
             Column {
                 Text(
-                    text = "Select the roles for this user:",
+                    text = "Select one role for this user:",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -397,9 +403,9 @@ fun EditRolesDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isStudent,
-                        onCheckedChange = { isStudent = it }
+                    RadioButton(
+                        selected = selectedRole == "student",
+                        onClick = { selectedRole = "student" }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Student")
@@ -409,9 +415,9 @@ fun EditRolesDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isLecturer,
-                        onCheckedChange = { isLecturer = it }
+                    RadioButton(
+                        selected = selectedRole == "lecturer",
+                        onClick = { selectedRole = "lecturer" }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Lecturer")
@@ -421,9 +427,9 @@ fun EditRolesDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isAdmin,
-                        onCheckedChange = { isAdmin = it }
+                    RadioButton(
+                        selected = selectedRole == "admin",
+                        onClick = { selectedRole = "admin" }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Admin")
@@ -434,9 +440,9 @@ fun EditRolesDialog(
             Button(
                 onClick = {
                     onConfirm(UserRoles(
-                        student = isStudent,
-                        lecturer = isLecturer,
-                        admin = isAdmin
+                        student = selectedRole == "student",
+                        lecturer = selectedRole == "lecturer",
+                        admin = selectedRole == "admin"
                     ))
                 }
             ) {
@@ -460,9 +466,7 @@ fun CreateUserDialog(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var isStudent by remember { mutableStateOf(true) }
-    var isLecturer by remember { mutableStateOf(false) }
-    var isAdmin by remember { mutableStateOf(false) }
+    var selectedRole by remember { mutableStateOf("student") }
 
     var emailError by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf(false) }
@@ -531,7 +535,7 @@ fun CreateUserDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Select roles:",
+                    text = "Select one role:",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -540,9 +544,9 @@ fun CreateUserDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isStudent,
-                        onCheckedChange = { isStudent = it },
+                    RadioButton(
+                        selected = selectedRole == "student",
+                        onClick = { selectedRole = "student" },
                         enabled = !isLoading
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -553,9 +557,9 @@ fun CreateUserDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isLecturer,
-                        onCheckedChange = { isLecturer = it },
+                    RadioButton(
+                        selected = selectedRole == "lecturer",
+                        onClick = { selectedRole = "lecturer" },
                         enabled = !isLoading
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -566,9 +570,9 @@ fun CreateUserDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
-                        checked = isAdmin,
-                        onCheckedChange = { isAdmin = it },
+                    RadioButton(
+                        selected = selectedRole == "admin",
+                        onClick = { selectedRole = "admin" },
                         enabled = !isLoading
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -593,9 +597,9 @@ fun CreateUserDialog(
                             password,
                             name,
                             UserRoles(
-                                student = isStudent,
-                                lecturer = isLecturer,
-                                admin = isAdmin
+                                student = selectedRole == "student",
+                                lecturer = selectedRole == "lecturer",
+                                admin = selectedRole == "admin"
                             )
                         )
                     } else {
