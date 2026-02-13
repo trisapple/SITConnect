@@ -46,6 +46,11 @@ exports.sendWelcomeEmail = functions.auth.user().onCreate((user) => {
     email: email,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     name: "Test",
+    roles: {
+        "student": true,
+        "lecturer": false,
+        "admin": false
+    },
     // ... other initial user data
   }).then(() => {
     console.log('New user document created in Firestore for:', email);
