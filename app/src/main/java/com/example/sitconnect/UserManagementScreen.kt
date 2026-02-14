@@ -5,6 +5,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,8 +33,13 @@ fun UserManagementScreen(
     val usersListState by adminViewModel.usersListState.collectAsState()
     val userUpdateState by adminViewModel.userUpdateState.collectAsState()
     val userCreateState by adminViewModel.userCreateState.collectAsState()
+    val passwordResetState by adminViewModel.passwordResetState.collectAsState()
+    val userDeleteState by adminViewModel.userDeleteState.collectAsState()
 
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf<UserListItem?>(null) }
+    var showResetPasswordDialog by remember { mutableStateOf<UserListItem?>(null) }
+    var showEditNameDialog by remember { mutableStateOf<UserListItem?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Fetch current user's data to check admin status
@@ -69,6 +79,42 @@ fun UserManagementScreen(
                     "Error: ${(userCreateState as UserCreateState.Error).message}"
                 )
                 adminViewModel.resetCreateState()
+            }
+            else -> {}
+        }
+    }
+
+    // Handle password reset success/error
+    LaunchedEffect(passwordResetState) {
+        when (passwordResetState) {
+            is PasswordResetState.Success -> {
+                showResetPasswordDialog = null
+                snackbarHostState.showSnackbar("Password reset email sent!")
+                adminViewModel.resetPasswordState()
+            }
+            is PasswordResetState.Error -> {
+                snackbarHostState.showSnackbar(
+                    "Error: ${(passwordResetState as PasswordResetState.Error).message}"
+                )
+                adminViewModel.resetPasswordState()
+            }
+            else -> {}
+        }
+    }
+
+    // Handle user deletion success/error
+    LaunchedEffect(userDeleteState) {
+        when (userDeleteState) {
+            is UserDeleteState.Success -> {
+                showDeleteDialog = null
+                snackbarHostState.showSnackbar("User deleted successfully!")
+                adminViewModel.resetDeleteState()
+            }
+            is UserDeleteState.Error -> {
+                snackbarHostState.showSnackbar(
+                    "Error: ${(userDeleteState as UserDeleteState.Error).message}"
+                )
+                adminViewModel.resetDeleteState()
             }
             else -> {}
         }
@@ -176,6 +222,9 @@ fun UserManagementScreen(
                                     onUpdateRoles = { roles ->
                                         adminViewModel.updateUserRoles(user.uid, roles)
                                     },
+                                    onResetPassword = { showResetPasswordDialog = user },
+                                    onDeleteUser = { showDeleteDialog = user },
+                                    onEditName = { showEditNameDialog = user },
                                     isUpdating = userUpdateState is UserUpdateState.Loading
                                 )
                             }
@@ -260,6 +309,130 @@ fun UserManagementScreen(
             isLoading = userCreateState is UserCreateState.Loading
         )
     }
+
+    // Reset password dialog
+    showResetPasswordDialog?.let { user ->
+        AlertDialog(
+            onDismissRequest = { showResetPasswordDialog = null },
+            title = { Text("Reset Password") },
+            text = {
+                Column {
+                    Text("Send password reset email to:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = user.email ?: "Unknown email",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (passwordResetState is PasswordResetState.Loading) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { user.email?.let { adminViewModel.resetPassword(it) } },
+                    enabled = passwordResetState !is PasswordResetState.Loading && user.email != null
+                ) {
+                    Text("Send Reset Email")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showResetPasswordDialog = null },
+                    enabled = passwordResetState !is PasswordResetState.Loading
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Delete user dialog
+    showDeleteDialog?.let { user ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
+            title = { Text("Delete User") },
+            text = {
+                Column {
+                    Text("Are you sure you want to delete this user?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${user.name ?: "Unknown"} (${user.email ?: "No email"})",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "This action cannot be undone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    if (userDeleteState is UserDeleteState.Loading) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { adminViewModel.deleteUser(user.uid) },
+                    enabled = userDeleteState !is UserDeleteState.Loading,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showDeleteDialog = null },
+                    enabled = userDeleteState !is UserDeleteState.Loading
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit name dialog
+    showEditNameDialog?.let { user ->
+        var newName by remember { mutableStateOf(user.name ?: "") }
+        
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = null },
+            title = { Text("Edit User Name") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            adminViewModel.updateUserName(user.uid, newName)
+                            showEditNameDialog = null
+                        }
+                    },
+                    enabled = newName.isNotBlank()
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showEditNameDialog = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -267,9 +440,13 @@ fun UserManagementCard(
     user: UserListItem,
     currentUserId: String?,
     onUpdateRoles: (UserRoles) -> Unit,
+    onResetPassword: () -> Unit,
+    onDeleteUser: () -> Unit,
+    onEditName: () -> Unit,
     isUpdating: Boolean
 ) {
     var showDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val isCurrentUser = user.uid == currentUserId
 
     Card(
@@ -310,11 +487,57 @@ fun UserManagementCard(
                         )
                     }
                 }
-                Button(
-                    onClick = { showDialog = true },
-                    enabled = !isUpdating
-                ) {
-                    Text("Edit Roles")
+                Row {
+                    Button(
+                        onClick = { showDialog = true },
+                        enabled = !isUpdating
+                    ) {
+                        Text("Edit Roles")
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit Name") },
+                                onClick = {
+                                    showMenu = false
+                                    onEditName()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Reset Password") },
+                                onClick = {
+                                    showMenu = false
+                                    onResetPassword()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                            )
+                            if (!isCurrentUser) {
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Delete User", color = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        showMenu = false
+                                        onDeleteUser()
+                                    },
+                                    leadingIcon = { 
+                                        Icon(
+                                            Icons.Default.Delete, 
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error
+                                        ) 
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 

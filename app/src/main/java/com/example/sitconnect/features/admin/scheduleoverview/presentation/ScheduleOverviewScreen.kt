@@ -48,20 +48,20 @@ fun ScheduleOverviewScreen(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("All Schedules") },
+                text = { Text("All") },
                 icon = { Icon(Icons.Default.DateRange, contentDescription = null) }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Room Usage") },
-                icon = { Icon(Icons.Default.Place, contentDescription = null) }
+                text = { Text("By Lecturer") },
+                icon = { Icon(Icons.Default.Person, contentDescription = null) }
             )
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
-                text = { Text("Conflicts") },
-                icon = { Icon(Icons.Default.Warning, contentDescription = null) }
+                text = { Text("Rooms") },
+                icon = { Icon(Icons.Default.Place, contentDescription = null) }
             )
         }
 
@@ -82,8 +82,8 @@ fun ScheduleOverviewScreen(
                         selectedDay = selectedDay,
                         onDaySelected = { selectedDay = it }
                     )
-                    1 -> RoomUtilizationTab(roomUtilization = successState.roomUtilization)
-                    2 -> ConflictsTab(conflicts = successState.conflicts)
+                    1 -> ByLecturerTab(lecturerGroups = successState.lecturerGroups)
+                    2 -> RoomUtilizationTab(roomUtilization = successState.roomUtilization)
                 }
             }
             is ScheduleOverviewState.Error -> {
@@ -230,6 +230,140 @@ private fun ScheduleEntryCard(entry: ScheduleEntry) {
                 label = { Text("${entry.enrolledStudents.size}") },
                 leadingIcon = { Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
+        }
+    }
+}
+
+@Composable
+private fun ByLecturerTab(lecturerGroups: List<LecturerScheduleGroup>) {
+    var expandedLecturerId by remember { mutableStateOf<String?>(null) }
+
+    if (lecturerGroups.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No schedules found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(lecturerGroups, key = { it.lecturerId }) { group ->
+                LecturerScheduleCard(
+                    group = group,
+                    isExpanded = expandedLecturerId == group.lecturerId,
+                    onToggle = {
+                        expandedLecturerId = if (expandedLecturerId == group.lecturerId) null else group.lecturerId
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LecturerScheduleCard(
+    group: LecturerScheduleGroup,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column {
+            // Header - always visible
+            Surface(
+                onClick = onToggle,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = group.lecturerName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "${group.schedules.size} classes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand"
+                    )
+                }
+            }
+
+            // Expanded content
+            if (isExpanded) {
+                HorizontalDivider()
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // Group by day
+                    val byDay = group.schedules.groupBy { it.dayOfWeek }
+                    byDay.forEach { (day, schedules) ->
+                        Text(
+                            text = getDayName(day),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        schedules.forEach { schedule ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(4.dp)
+                                        .height(40.dp)
+                                        .background(
+                                            color = when (schedule.classType) {
+                                                ClassType.LECTURE -> Color(0xFF2196F3)
+                                                ClassType.TUTORIAL -> Color(0xFF4CAF50)
+                                                ClassType.LAB -> Color(0xFFFF9800)
+                                            },
+                                            shape = MaterialTheme.shapes.small
+                                        )
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${schedule.moduleCode} - ${schedule.moduleName}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "${schedule.startTime} - ${schedule.endTime} • ${schedule.venue}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text(schedule.classType.name) }
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
         }
     }
 }
@@ -390,5 +524,7 @@ private fun getDayName(day: Int): String = when (day) {
     7 -> "Sunday"
     else -> "Unknown"
 }
+
+
 
 

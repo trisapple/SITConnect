@@ -25,11 +25,18 @@ data class ScheduleConflict(
     val conflictingEntries: List<ScheduleEntry>
 )
 
+data class LecturerScheduleGroup(
+    val lecturerId: String,
+    val lecturerName: String,
+    val schedules: List<ScheduleEntry>
+)
+
 sealed class ScheduleOverviewState {
     object Idle : ScheduleOverviewState()
     object Loading : ScheduleOverviewState()
     data class Success(
         val schedules: List<ScheduleEntry> = emptyList(),
+        val lecturerGroups: List<LecturerScheduleGroup> = emptyList(),
         val roomUtilization: List<RoomUtilization> = emptyList(),
         val conflicts: List<ScheduleConflict> = emptyList()
     ) : ScheduleOverviewState()
@@ -78,9 +85,11 @@ class ScheduleOverviewViewModel : ViewModel() {
 
                     val roomUtilization = calculateRoomUtilization(schedules)
                     val conflicts = detectConflicts(schedules)
+                    val lecturerGroups = groupByLecturer(schedules)
 
                     _state.value = ScheduleOverviewState.Success(
                         schedules = schedules,
+                        lecturerGroups = lecturerGroups,
                         roomUtilization = roomUtilization,
                         conflicts = conflicts
                     )
@@ -135,6 +144,19 @@ class ScheduleOverviewViewModel : ViewModel() {
         }
 
         return conflicts
+    }
+
+    private fun groupByLecturer(schedules: List<ScheduleEntry>): List<LecturerScheduleGroup> {
+        return schedules
+            .groupBy { it.lecturerId }
+            .map { (lecturerId, lecturerSchedules) ->
+                LecturerScheduleGroup(
+                    lecturerId = lecturerId,
+                    lecturerName = lecturerSchedules.firstOrNull()?.lecturerName ?: "Unknown",
+                    schedules = lecturerSchedules.sortedWith(compareBy({ it.dayOfWeek }, { it.startTime }))
+                )
+            }
+            .sortedBy { it.lecturerName }
     }
 
     private fun hasTimeOverlap(start1: String, end1: String, start2: String, end2: String): Boolean {

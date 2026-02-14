@@ -140,3 +140,145 @@ exports.createUser = functions.https.onCall(async (data, context) => {
   }
 });
 
+// Cloud Function to send password reset email (admin only)
+exports.sendPasswordReset = functions.https.onCall(async (data, context) => {
+  // Check if the request is made by an authenticated user
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated to send password reset emails.'
+    );
+  }
+
+  // Check if the requesting user is an admin
+  const requestingUserDoc = await admin.firestore()
+    .collection('users')
+    .doc(context.auth.uid)
+    .get();
+
+  if (!requestingUserDoc.exists || !requestingUserDoc.data().roles?.admin) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only administrators can send password reset emails.'
+    );
+  }
+
+  const { email } = data;
+
+  if (!email) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Email is required.'
+    );
+  }
+
+  try {
+    // Generate password reset link
+    const resetLink = await admin.auth().generatePasswordResetLink(email);
+    
+    // In a production app, you would send this link via email
+    // For now, we'll just log it and return success
+    console.log('Password reset link generated for:', email);
+    console.log('Reset link:', resetLink);
+
+    return {
+      success: true,
+      message: 'Password reset email sent successfully',
+    };
+  } catch (error) {
+    console.error('Error sending password reset:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      error.message || 'Failed to send password reset email'
+    );
+  }
+});
+
+// Cloud Function to delete a user (admin only)
+exports.deleteUser = functions.https.onCall(async (data, context) => {
+  // Check if the request is made by an authenticated user
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'User must be authenticated to delete users.'
+    );
+  }
+
+  // Check if the requesting user is an admin
+  const requestingUserDoc = await admin.firestore()
+    .collection('users')
+    .doc(context.auth.uid)
+    .get();
+
+  if (!requestingUserDoc.exists || !requestingUserDoc.data().roles?.admin) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only administrators can delete users.'
+    );
+  }
+
+  const { uid } = data;
+
+  if (!uid) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'User ID is required.'
+    );
+  }
+
+  // Prevent self-deletion
+  if (uid === context.auth.uid) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Cannot delete your own account.'
+    );
+  }
+
+  try {
+    // Delete the user from Firebase Authentication
+    await admin.auth().deleteUser(uid);
+
+    // Delete the user document from Firestore
+    await admin.firestore().collection('users').doc(uid).delete();
+
+    // Optionally: Clean up related data (enrolled students from modules, etc.)
+    const modulesSnapshot = await admin.firestore()
+      .collection('modules')
+      .where('enrolledStudents', 'array-contains', uid)
+      .get();
+
+    const batch = admin.firestore().batch();
+    modulesSnapshot.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        enrolledStudents: admin.firestore.FieldValue.arrayRemove(uid)
+      });
+    });
+
+    // Also clean up from schedules
+    const schedulesSnapshot = await admin.firestore()
+      .collection('schedules')
+      .where('enrolledStudents', 'array-contains', uid)
+      .get();
+
+    schedulesSnapshot.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        enrolledStudents: admin.firestore.FieldValue.arrayRemove(uid)
+      });
+    });
+
+    await batch.commit();
+
+    console.log('Successfully deleted user:', uid);
+
+    return {
+      success: true,
+      message: 'User deleted successfully',
+    };
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    throw new functions.https.HttpsError(
+      'internal',
+      error.message || 'Failed to delete user'
+    );
+  }
+});

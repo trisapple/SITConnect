@@ -44,6 +44,20 @@ sealed class SeedDataState {
     data class Error(val message: String) : SeedDataState()
 }
 
+sealed class PasswordResetState {
+    object Idle : PasswordResetState()
+    object Loading : PasswordResetState()
+    object Success : PasswordResetState()
+    data class Error(val message: String) : PasswordResetState()
+}
+
+sealed class UserDeleteState {
+    object Idle : UserDeleteState()
+    object Loading : UserDeleteState()
+    object Success : UserDeleteState()
+    data class Error(val message: String) : UserDeleteState()
+}
+
 class AdminViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val functions: FirebaseFunctions = FirebaseFunctions.getInstance()
@@ -59,6 +73,12 @@ class AdminViewModel : ViewModel() {
 
     private val _seedDataState = MutableStateFlow<SeedDataState>(SeedDataState.Idle)
     val seedDataState: StateFlow<SeedDataState> = _seedDataState
+
+    private val _passwordResetState = MutableStateFlow<PasswordResetState>(PasswordResetState.Idle)
+    val passwordResetState: StateFlow<PasswordResetState> = _passwordResetState
+
+    private val _userDeleteState = MutableStateFlow<UserDeleteState>(UserDeleteState.Idle)
+    val userDeleteState: StateFlow<UserDeleteState> = _userDeleteState
 
     fun fetchAllUsers() {
         viewModelScope.launch {
@@ -153,6 +173,73 @@ class AdminViewModel : ViewModel() {
 
     fun resetCreateState() {
         _userCreateState.value = UserCreateState.Idle
+    }
+
+    fun resetPassword(email: String) {
+        viewModelScope.launch {
+            try {
+                _passwordResetState.value = PasswordResetState.Loading
+
+                // Call Cloud Function to send password reset email
+                val data = hashMapOf("email" to email)
+                functions
+                    .getHttpsCallable("sendPasswordReset")
+                    .call(data)
+                    .await()
+
+                _passwordResetState.value = PasswordResetState.Success
+            } catch (e: Exception) {
+                _passwordResetState.value = PasswordResetState.Error(e.message ?: "Failed to send password reset email")
+            }
+        }
+    }
+
+    fun resetPasswordState() {
+        _passwordResetState.value = PasswordResetState.Idle
+    }
+
+    fun deleteUser(uid: String) {
+        viewModelScope.launch {
+            try {
+                _userDeleteState.value = UserDeleteState.Loading
+
+                // Call Cloud Function to delete user from Auth and Firestore
+                val data = hashMapOf("uid" to uid)
+                functions
+                    .getHttpsCallable("deleteUser")
+                    .call(data)
+                    .await()
+
+                _userDeleteState.value = UserDeleteState.Success
+
+                // Refresh the users list
+                fetchAllUsers()
+            } catch (e: Exception) {
+                _userDeleteState.value = UserDeleteState.Error(e.message ?: "Failed to delete user")
+            }
+        }
+    }
+
+    fun resetDeleteState() {
+        _userDeleteState.value = UserDeleteState.Idle
+    }
+
+    fun updateUserName(uid: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                _userUpdateState.value = UserUpdateState.Loading
+
+                firestore.collection("users")
+                    .document(uid)
+                    .update("name", newName)
+                    .await()
+
+                _userUpdateState.value = UserUpdateState.Success
+                fetchAllUsers()
+            } catch (e: Exception) {
+                _userUpdateState.value = UserUpdateState.Error(e.message ?: "Failed to update user name")
+            }
+        }
     }
 
     /**
