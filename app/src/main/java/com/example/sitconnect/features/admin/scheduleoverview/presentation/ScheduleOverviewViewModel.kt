@@ -1,0 +1,156 @@
+package com.example.sitconnect.features.admin.scheduleoverview.presentation
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.sitconnect.features.schedule.domain.model.ClassType
+import com.example.sitconnect.features.schedule.domain.model.ScheduleEntry
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
+
+data class RoomUtilization(
+    val venue: String,
+    val totalSlots: Int,
+    val bookedSlots: Int,
+    val utilizationPercent: Float
+)
+
+data class ScheduleConflict(
+    val venue: String,
+    val dayOfWeek: Int,
+    val timeSlot: String,
+    val conflictingEntries: List<ScheduleEntry>
+)
+
+sealed class ScheduleOverviewState {
+    object Idle : ScheduleOverviewState()
+    object Loading : ScheduleOverviewState()
+    data class Success(
+        val schedules: List<ScheduleEntry> = emptyList(),
+        val roomUtilization: List<RoomUtilization> = emptyList(),
+        val conflicts: List<ScheduleConflict> = emptyList()
+    ) : ScheduleOverviewState()
+    data class Error(val message: String) : ScheduleOverviewState()
+}
+
+class ScheduleOverviewViewModel : ViewModel() {
+    private val firestore = FirebaseFirestore.getInstance()
+
+    private val _state = MutableStateFlow<ScheduleOverviewState>(ScheduleOverviewState.Idle)
+    val state: StateFlow<ScheduleOverviewState> = _state
+
+    fun fetchAllSchedules() {
+        viewModelScope.launch {
+            try {
+                _state.value = ScheduleOverviewState.Loading
+
+                withTimeout(15000L) {
+                    val snapshot = firestore.collection("schedules").get().await()
+
+                    val schedules = snapshot.documents.mapNotNull { doc ->
+                        try {
+                            ScheduleEntry(
+                                id = doc.id,
+                                moduleId = doc.getString("moduleId") ?: "",
+                                moduleCode = doc.getString("moduleCode") ?: "",
+                                moduleName = doc.getString("moduleName") ?: "",
+                                classType = try {
+                                    ClassType.valueOf(doc.getString("classType") ?: "LECTURE")
+                                } catch (e: Exception) { ClassType.LECTURE },
+                                dayOfWeek = doc.getLong("dayOfWeek")?.toInt() ?: 1,
+                                startTime = doc.getString("startTime") ?: "",
+                                endTime = doc.getString("endTime") ?: "",
+                                venue = doc.getString("venue") ?: "",
+                                lecturerId = doc.getString("lecturerId") ?: "",
+                                lecturerName = doc.getString("lecturerName") ?: "",
+                                enrolledStudents = (doc.get("enrolledStudents") as? List<*>)
+                                    ?.mapNotNull { it as? String } ?: emptyList(),
+                                latitude = doc.getDouble("latitude") ?: 0.0,
+                                longitude = doc.getDouble("longitude") ?: 0.0,
+                                radiusMeters = doc.getLong("radiusMeters")?.toInt() ?: 100,
+                                attendanceCode = doc.getString("attendanceCode") ?: ""
+                            )
+                        } catch (e: Exception) { null }
+                    }.sortedWith(compareBy({ it.dayOfWeek }, { it.startTime }))
+
+                    val roomUtilization = calculateRoomUtilization(schedules)
+                    val conflicts = detectConflicts(schedules)
+
+                    _state.value = ScheduleOverviewState.Success(
+                        schedules = schedules,
+                        roomUtilization = roomUtilization,
+                        conflicts = conflicts
+                    )
+                }
+            } catch (e: Exception) {
+                _state.value = ScheduleOverviewState.Error(e.message ?: "Failed to fetch schedules")
+            }
+        }
+    }
+
+    private fun calculateRoomUtilization(schedules: List<ScheduleEntry>): List<RoomUtilization> {
+        val venues = schedules.groupBy { it.venue }
+        val totalPossibleSlots = 5 * 8 // 5 days * 8 time slots per day (approx)
+
+        return venues.map { (venue, entries) ->
+            RoomUtilization(
+                venue = venue,
+                totalSlots = totalPossibleSlots,
+                bookedSlots = entries.size,
+                utilizationPercent = (entries.size.toFloat() / totalPossibleSlots * 100).coerceIn(0f, 100f)
+            )
+        }.sortedByDescending { it.utilizationPercent }
+    }
+
+    private fun detectConflicts(schedules: List<ScheduleEntry>): List<ScheduleConflict> {
+        val conflicts = mutableListOf<ScheduleConflict>()
+
+        // Group by venue and day
+        val grouped = schedules.groupBy { "${it.venue}_${it.dayOfWeek}" }
+
+        grouped.forEach { (_, entries) ->
+            if (entries.size > 1) {
+                // Check for time overlaps
+                for (i in entries.indices) {
+                    for (j in i + 1 until entries.size) {
+                        val e1 = entries[i]
+                        val e2 = entries[j]
+
+                        if (hasTimeOverlap(e1.startTime, e1.endTime, e2.startTime, e2.endTime)) {
+                            conflicts.add(
+                                ScheduleConflict(
+                                    venue = e1.venue,
+                                    dayOfWeek = e1.dayOfWeek,
+                                    timeSlot = "${e1.startTime}-${e1.endTime} vs ${e2.startTime}-${e2.endTime}",
+                                    conflictingEntries = listOf(e1, e2)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        return conflicts
+    }
+
+    private fun hasTimeOverlap(start1: String, end1: String, start2: String, end2: String): Boolean {
+        val s1 = timeToMinutes(start1)
+        val e1 = timeToMinutes(end1)
+        val s2 = timeToMinutes(start2)
+        val e2 = timeToMinutes(end2)
+
+        return s1 < e2 && s2 < e1
+    }
+
+    private fun timeToMinutes(time: String): Int {
+        val parts = time.split(":")
+        return if (parts.size == 2) {
+            parts[0].toIntOrNull()?.times(60)?.plus(parts[1].toIntOrNull() ?: 0) ?: 0
+        } else 0
+    }
+}
+

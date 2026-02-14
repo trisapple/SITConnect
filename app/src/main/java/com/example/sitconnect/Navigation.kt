@@ -52,6 +52,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.automirrored.filled.List
 import kotlinx.coroutines.launch
+import com.example.sitconnect.features.admin.modulemanagement.presentation.ModuleManagementScreen
+import com.example.sitconnect.features.admin.scheduleoverview.presentation.ScheduleOverviewScreen
+import com.example.sitconnect.features.admin.facilitymanagement.presentation.FacilityManagementScreen
+import com.example.sitconnect.features.admin.mcreview.presentation.MCReviewScreen
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
@@ -68,6 +72,11 @@ sealed class Screen(val route: String) {
     object ClassManagement : Screen("class_management")
     object Schedule : Screen("schedule")
     object RoomBooking : Screen("room_booking")
+    // Admin features
+    object ModuleManagement : Screen("module_management")
+    object ScheduleOverview : Screen("schedule_overview")
+    object FacilityManagement : Screen("facility_management")
+    object MCReview : Screen("mc_review")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -308,6 +317,62 @@ fun SITConnectNavigation(
                             modifier = Modifier.padding(horizontal = 12.dp),
                             shape = RoundedCornerShape(4.dp)
                         )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Module Management") },
+                            label = { Text("Module Management") },
+                            selected = currentRoute == Screen.ModuleManagement.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.ModuleManagement.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.DateRange, contentDescription = "Schedule Overview") },
+                            label = { Text("Schedule Overview") },
+                            selected = currentRoute == Screen.ScheduleOverview.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.ScheduleOverview.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Place, contentDescription = "Facility Management") },
+                            label = { Text("Facility Management") },
+                            selected = currentRoute == Screen.FacilityManagement.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.FacilityManagement.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Create, contentDescription = "MC Review") },
+                            label = { Text("MC Review") },
+                            selected = currentRoute == Screen.MCReview.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.MCReview.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -471,6 +536,23 @@ fun SITConnectNavigation(
                         // Reuse FacilityBookingScreen but filter for lecturer rooms
                         FacilityBookingScreen(authViewModel = viewModel)
                     }
+
+                    // Admin routes
+                    composable(Screen.ModuleManagement.route) {
+                        ModuleManagementScreen()
+                    }
+
+                    composable(Screen.ScheduleOverview.route) {
+                        ScheduleOverviewScreen()
+                    }
+
+                    composable(Screen.FacilityManagement.route) {
+                        FacilityManagementScreen()
+                    }
+
+                    composable(Screen.MCReview.route) {
+                        MCReviewScreen(authViewModel = viewModel)
+                    }
                 }
             }
         }
@@ -550,6 +632,23 @@ fun SITConnectNavigation(
 
             composable(Screen.RoomBooking.route) {
                 FacilityBookingScreen(authViewModel = viewModel)
+            }
+
+            // Admin routes
+            composable(Screen.ModuleManagement.route) {
+                ModuleManagementScreen()
+            }
+
+            composable(Screen.ScheduleOverview.route) {
+                ScheduleOverviewScreen()
+            }
+
+            composable(Screen.FacilityManagement.route) {
+                FacilityManagementScreen()
+            }
+
+            composable(Screen.MCReview.route) {
+                MCReviewScreen(authViewModel = viewModel)
             }
         }
     }

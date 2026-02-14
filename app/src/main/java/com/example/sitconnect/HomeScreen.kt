@@ -143,6 +143,34 @@ fun HomeScreen(
             description = "Create/Delete accounts",
             route = Screen.UserManagement.route,
             color = Color(0xFFF44336)
+        ),
+        FeatureItem(
+            title = "Module Management",
+            emoji = "📚",
+            description = "Create/Edit/Delete modules",
+            route = Screen.ModuleManagement.route,
+            color = Color(0xFF3F51B5)
+        ),
+        FeatureItem(
+            title = "Schedule Overview",
+            emoji = "📆",
+            description = "View all schedules & conflicts",
+            route = Screen.ScheduleOverview.route,
+            color = Color(0xFFFF9800)
+        ),
+        FeatureItem(
+            title = "Facility Management",
+            emoji = "🏢",
+            description = "Manage bookings & facilities",
+            route = Screen.FacilityManagement.route,
+            color = Color(0xFF009688)
+        ),
+        FeatureItem(
+            title = "MC Review",
+            emoji = "🏥",
+            description = "Review MC submissions",
+            route = Screen.MCReview.route,
+            color = Color(0xFF4CAF50)
         )
     )
 
