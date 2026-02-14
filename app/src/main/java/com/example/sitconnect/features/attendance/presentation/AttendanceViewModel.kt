@@ -301,10 +301,10 @@ class AttendanceViewModel : ViewModel() {
                 sessionDate = today,
                 startTime = formatTime(maxOf(8, currentHour - 1)), // Started 1 hour ago or 8am
                 endTime = formatTime(maxOf(11, currentHour + 2)), // Ends in 2 hours or 11am
-                venue = "SIT@NYP Lab 4A",
+                venue = "SIT Punggol Campus Lab 4A",
                 qrCode = "MSL-2207-LAB4A",
-                latitude = 1.3792, // SIT coordinates
-                longitude = 103.8494,
+                latitude = 1.4136, // SIT Punggol Campus coordinates
+                longitude = 103.9123,
                 radiusMeters = 500 // Increased radius for testing
             ),
             AttendanceSession(
@@ -315,10 +315,10 @@ class AttendanceViewModel : ViewModel() {
                 sessionDate = today,
                 startTime = formatTime(minOf(20, currentHour + 2)), // Upcoming - 2 hours from now
                 endTime = formatTime(minOf(22, currentHour + 4)),
-                venue = "SIT@NYP Tutorial Room 3",
+                venue = "SIT Punggol Campus Tutorial Room 3",
                 qrCode = "WS-2205-TUT3",
-                latitude = 1.3792,
-                longitude = 103.8494,
+                latitude = 1.4136,
+                longitude = 103.9123,
                 radiusMeters = 500
             ),
             AttendanceSession(
@@ -329,10 +329,10 @@ class AttendanceViewModel : ViewModel() {
                 sessionDate = today,
                 startTime = formatTime(minOf(21, currentHour + 4)), // Later session
                 endTime = formatTime(minOf(23, currentHour + 6)),
-                venue = "SIT@Dover LT1",
+                venue = "SIT Punggol Campus LT1",
                 qrCode = "SE-2104-LT1",
-                latitude = 1.3043,
-                longitude = 103.7876,
+                latitude = 1.4136,
+                longitude = 103.9123,
                 radiusMeters = 500
             )
         )
