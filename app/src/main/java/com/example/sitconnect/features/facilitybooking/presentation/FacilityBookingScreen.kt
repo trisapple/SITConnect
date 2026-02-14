@@ -460,7 +460,22 @@ fun BookingCard(
                 )
             }
 
-            if (booking.status == BookingStatus.CONFIRMED || booking.status == BookingStatus.PENDING) {
+            // Check if booking is in the past
+            val isPastBooking = run {
+                val now = Calendar.getInstance()
+                val bookingCal = Calendar.getInstance().apply { time = booking.bookingDate }
+
+                // Parse the end time from timeSlot (e.g., "09:00 - 10:00")
+                val endTimeParts = booking.timeSlot.split("-").lastOrNull()?.trim()?.split(":")
+                if (endTimeParts != null && endTimeParts.size >= 2) {
+                    bookingCal.set(Calendar.HOUR_OF_DAY, endTimeParts[0].toIntOrNull() ?: 23)
+                    bookingCal.set(Calendar.MINUTE, endTimeParts[1].toIntOrNull() ?: 59)
+                }
+
+                now.after(bookingCal)
+            }
+
+            if ((booking.status == BookingStatus.CONFIRMED || booking.status == BookingStatus.PENDING) && !isPastBooking) {
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedButton(
                     onClick = onCancelClick,
@@ -471,6 +486,13 @@ fun BookingCard(
                 ) {
                     Text("Cancel Booking")
                 }
+            } else if (isPastBooking && booking.status != BookingStatus.CANCELLED) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "This booking has passed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

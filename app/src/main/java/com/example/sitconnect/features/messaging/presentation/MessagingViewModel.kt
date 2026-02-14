@@ -270,6 +270,24 @@ class MessagingViewModel : ViewModel() {
         }
     }
 
+    fun deleteMessage(chatRoomId: String, messageId: String) {
+        viewModelScope.launch {
+            try {
+                firestore.collection("chat_rooms")
+                    .document(chatRoomId)
+                    .collection("messages")
+                    .document(messageId)
+                    .delete()
+                    .await()
+
+                // Refresh messages
+                fetchMessages(chatRoomId)
+            } catch (e: Exception) {
+                // Handle error silently
+            }
+        }
+    }
+
     private fun getFileType(context: Context, uri: Uri): String {
         val mimeType = context.contentResolver.getType(uri)
         return when {
@@ -281,4 +299,3 @@ class MessagingViewModel : ViewModel() {
         }
     }
 }
-

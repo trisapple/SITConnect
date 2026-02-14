@@ -37,6 +37,13 @@ sealed class UserCreateState {
     data class Error(val message: String) : UserCreateState()
 }
 
+sealed class SeedDataState {
+    object Idle : SeedDataState()
+    object Loading : SeedDataState()
+    data class Success(val message: String) : SeedDataState()
+    data class Error(val message: String) : SeedDataState()
+}
+
 class AdminViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val functions: FirebaseFunctions = FirebaseFunctions.getInstance()
@@ -49,6 +56,9 @@ class AdminViewModel : ViewModel() {
 
     private val _userCreateState = MutableStateFlow<UserCreateState>(UserCreateState.Idle)
     val userCreateState: StateFlow<UserCreateState> = _userCreateState
+
+    private val _seedDataState = MutableStateFlow<SeedDataState>(SeedDataState.Idle)
+    val seedDataState: StateFlow<SeedDataState> = _seedDataState
 
     fun fetchAllUsers() {
         viewModelScope.launch {
@@ -143,5 +153,264 @@ class AdminViewModel : ViewModel() {
 
     fun resetCreateState() {
         _userCreateState.value = UserCreateState.Idle
+    }
+
+    /**
+     * Seeds the database with sample modules and schedules.
+     * Uses existing lecturers and students from the users collection.
+     */
+    fun seedDatabase() {
+        viewModelScope.launch {
+            try {
+                _seedDataState.value = SeedDataState.Loading
+
+                // SIT Punggol Campus coordinates
+                val sitLatitude = 1.4136
+                val sitLongitude = 103.9123
+                val radiusMeters = 500
+
+                // Fetch all users to get lecturers and students
+                val usersSnapshot = firestore.collection("users").get().await()
+                val users = usersSnapshot.documents.mapNotNull { doc ->
+                    val rolesMap = doc.get("roles") as? Map<*, *>
+                    val roles = UserRoles(
+                        student = rolesMap?.get("student") as? Boolean ?: false,
+                        lecturer = rolesMap?.get("lecturer") as? Boolean ?: false,
+                        admin = rolesMap?.get("admin") as? Boolean ?: false
+                    )
+                    Triple(doc.id, doc.getString("name") ?: "", roles)
+                }
+
+                val lecturers = users.filter { it.third.lecturer }
+                val students = users.filter { it.third.student }
+                val studentUids = students.map { it.first }
+
+                if (lecturers.isEmpty()) {
+                    _seedDataState.value = SeedDataState.Error("No lecturers found. Please create lecturer accounts first.")
+                    return@launch
+                }
+
+                if (students.isEmpty()) {
+                    _seedDataState.value = SeedDataState.Error("No students found. Please create student accounts first.")
+                    return@launch
+                }
+
+                // Use first lecturer (or second if available for variety)
+                val lecturer1 = lecturers[0]
+                val lecturer2 = if (lecturers.size > 1) lecturers[1] else lecturers[0]
+
+                // Check if data already exists
+                val existingModules = firestore.collection("modules").limit(1).get().await()
+                if (!existingModules.isEmpty) {
+                    _seedDataState.value = SeedDataState.Error("Seed data already exists. Delete existing modules and schedules first if you want to re-seed.")
+                    return@launch
+                }
+
+                // Create modules
+                val modules = listOf(
+                    hashMapOf(
+                        "code" to "ICT2207",
+                        "name" to "Mobile Security",
+                        "description" to "Learn mobile application security fundamentals including Android and iOS security models, secure coding practices, and vulnerability assessment.",
+                        "trimester" to "T2 2025-2026",
+                        "lecturerId" to lecturer1.first,
+                        "lecturerName" to lecturer1.second,
+                        "enrolledStudents" to studentUids
+                    ),
+                    hashMapOf(
+                        "code" to "ICT2205",
+                        "name" to "Web Security",
+                        "description" to "Study web application security including OWASP Top 10, XSS, CSRF, SQL injection, and secure development practices.",
+                        "trimester" to "T2 2025-2026",
+                        "lecturerId" to lecturer1.first,
+                        "lecturerName" to lecturer1.second,
+                        "enrolledStudents" to studentUids
+                    ),
+                    hashMapOf(
+                        "code" to "ICT2104",
+                        "name" to "Software Engineering",
+                        "description" to "Software development methodologies, design patterns, testing strategies, and project management.",
+                        "trimester" to "T2 2025-2026",
+                        "lecturerId" to lecturer2.first,
+                        "lecturerName" to lecturer2.second,
+                        "enrolledStudents" to studentUids
+                    ),
+                    hashMapOf(
+                        "code" to "ICT2112",
+                        "name" to "Network Security",
+                        "description" to "Network security fundamentals including firewalls, IDS/IPS, VPNs, and network monitoring.",
+                        "trimester" to "T2 2025-2026",
+                        "lecturerId" to lecturer2.first,
+                        "lecturerName" to lecturer2.second,
+                        "enrolledStudents" to studentUids
+                    )
+                )
+
+                val moduleIds = mutableMapOf<String, String>()
+                for (module in modules) {
+                    val docRef = firestore.collection("modules").add(module).await()
+                    moduleIds[module["code"] as String] = docRef.id
+                }
+
+                // Create schedules
+                val schedules = listOf(
+                    // ICT2207 - Mobile Security
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2207"],
+                        "moduleCode" to "ICT2207",
+                        "moduleName" to "Mobile Security",
+                        "classType" to "LECTURE",
+                        "dayOfWeek" to 1, // Monday
+                        "startTime" to "09:00",
+                        "endTime" to "11:00",
+                        "venue" to "SIT Punggol Campus LT1",
+                        "lecturerId" to lecturer1.first,
+                        "lecturerName" to lecturer1.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2207"],
+                        "moduleCode" to "ICT2207",
+                        "moduleName" to "Mobile Security",
+                        "classType" to "LAB",
+                        "dayOfWeek" to 3, // Wednesday
+                        "startTime" to "14:00",
+                        "endTime" to "17:00",
+                        "venue" to "SIT Punggol Campus Lab 4A",
+                        "lecturerId" to lecturer1.first,
+                        "lecturerName" to lecturer1.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    // ICT2205 - Web Security
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2205"],
+                        "moduleCode" to "ICT2205",
+                        "moduleName" to "Web Security",
+                        "classType" to "LECTURE",
+                        "dayOfWeek" to 2, // Tuesday
+                        "startTime" to "09:00",
+                        "endTime" to "11:00",
+                        "venue" to "SIT Punggol Campus LT2",
+                        "lecturerId" to lecturer1.first,
+                        "lecturerName" to lecturer1.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2205"],
+                        "moduleCode" to "ICT2205",
+                        "moduleName" to "Web Security",
+                        "classType" to "TUTORIAL",
+                        "dayOfWeek" to 4, // Thursday
+                        "startTime" to "10:00",
+                        "endTime" to "12:00",
+                        "venue" to "SIT Punggol Campus Tutorial Room 3",
+                        "lecturerId" to lecturer1.first,
+                        "lecturerName" to lecturer1.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    // ICT2104 - Software Engineering
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2104"],
+                        "moduleCode" to "ICT2104",
+                        "moduleName" to "Software Engineering",
+                        "classType" to "LECTURE",
+                        "dayOfWeek" to 1, // Monday
+                        "startTime" to "14:00",
+                        "endTime" to "16:00",
+                        "venue" to "SIT Punggol Campus LT3",
+                        "lecturerId" to lecturer2.first,
+                        "lecturerName" to lecturer2.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2104"],
+                        "moduleCode" to "ICT2104",
+                        "moduleName" to "Software Engineering",
+                        "classType" to "TUTORIAL",
+                        "dayOfWeek" to 5, // Friday
+                        "startTime" to "09:00",
+                        "endTime" to "11:00",
+                        "venue" to "SIT Punggol Campus Tutorial Room 1",
+                        "lecturerId" to lecturer2.first,
+                        "lecturerName" to lecturer2.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    // ICT2112 - Network Security
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2112"],
+                        "moduleCode" to "ICT2112",
+                        "moduleName" to "Network Security",
+                        "classType" to "LECTURE",
+                        "dayOfWeek" to 2, // Tuesday
+                        "startTime" to "14:00",
+                        "endTime" to "16:00",
+                        "venue" to "SIT Punggol Campus LT1",
+                        "lecturerId" to lecturer2.first,
+                        "lecturerName" to lecturer2.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    ),
+                    hashMapOf(
+                        "moduleId" to moduleIds["ICT2112"],
+                        "moduleCode" to "ICT2112",
+                        "moduleName" to "Network Security",
+                        "classType" to "LAB",
+                        "dayOfWeek" to 4, // Thursday
+                        "startTime" to "14:00",
+                        "endTime" to "17:00",
+                        "venue" to "SIT Punggol Campus Network Lab",
+                        "lecturerId" to lecturer2.first,
+                        "lecturerName" to lecturer2.second,
+                        "enrolledStudents" to studentUids,
+                        "latitude" to sitLatitude,
+                        "longitude" to sitLongitude,
+                        "radiusMeters" to radiusMeters,
+                        "attendanceCode" to ""
+                    )
+                )
+
+                for (schedule in schedules) {
+                    firestore.collection("schedules").add(schedule).await()
+                }
+
+                val message = "Created ${modules.size} modules and ${schedules.size} schedules. " +
+                        "${studentUids.size} student(s) enrolled in all modules."
+                _seedDataState.value = SeedDataState.Success(message)
+
+            } catch (e: Exception) {
+                _seedDataState.value = SeedDataState.Error(e.message ?: "Failed to seed database")
+            }
+        }
+    }
+
+    fun resetSeedState() {
+        _seedDataState.value = SeedDataState.Idle
     }
 }

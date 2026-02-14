@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -43,7 +45,11 @@ fun ClassManagementScreen(
         StudentListScreen(
             module = selectedModule,
             students = (classState as? ClassManagementState.Success)?.students ?: emptyList(),
-            onBack = { classViewModel.clearSelectedModule() }
+            availableStudents = (classState as? ClassManagementState.Success)?.availableStudents ?: emptyList(),
+            onBack = { classViewModel.clearSelectedModule() },
+            onEnrollStudent = { studentUid -> classViewModel.enrollStudent(selectedModule.id, studentUid) },
+            onUnenrollStudent = { studentUid -> classViewModel.unenrollStudent(selectedModule.id, studentUid) },
+            onFetchAvailable = { classViewModel.fetchAvailableStudents(selectedModule.id, selectedModule.enrolledStudents) }
         )
     } else {
         Column(
@@ -193,8 +199,18 @@ fun ModuleCard(
 fun StudentListScreen(
     module: Module,
     students: List<EnrolledStudent>,
-    onBack: () -> Unit
+    availableStudents: List<EnrolledStudent>,
+    onBack: () -> Unit,
+    onEnrollStudent: (String) -> Unit,
+    onUnenrollStudent: (String) -> Unit,
+    onFetchAvailable: () -> Unit
 ) {
+    var showEnrollDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        onFetchAvailable()
+    }
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -212,7 +228,7 @@ fun StudentListScreen(
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = module.code,
                     style = MaterialTheme.typography.labelMedium,
@@ -222,6 +238,13 @@ fun StudentListScreen(
                     text = module.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
+                )
+            }
+            // Add student button
+            IconButton(onClick = { showEnrollDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Enroll Student"
                 )
             }
         }
@@ -250,6 +273,12 @@ fun StudentListScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { showEnrollDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Enroll Students")
+                    }
                 }
             }
         } else {
@@ -267,15 +296,107 @@ fun StudentListScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 items(students) { student ->
-                    StudentCard(student = student)
+                    StudentCard(
+                        student = student,
+                        onUnenroll = { onUnenrollStudent(student.uid) }
+                    )
                 }
             }
         }
     }
+
+    // Enroll Student Dialog
+    if (showEnrollDialog) {
+        EnrollStudentDialog(
+            availableStudents = availableStudents,
+            onDismiss = { showEnrollDialog = false },
+            onEnroll = { studentUid ->
+                onEnrollStudent(studentUid)
+                showEnrollDialog = false
+            }
+        )
+    }
 }
 
 @Composable
-fun StudentCard(student: EnrolledStudent) {
+fun EnrollStudentDialog(
+    availableStudents: List<EnrolledStudent>,
+    onDismiss: () -> Unit,
+    onEnroll: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enroll Student") },
+        text = {
+            if (availableStudents.isEmpty()) {
+                Text("No students available to enroll")
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.heightIn(max = 400.dp)
+                ) {
+                    items(availableStudents) { student ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onEnroll(student.uid) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(40.dp),
+                                    shape = MaterialTheme.shapes.small,
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = student.name.firstOrNull()?.uppercase() ?: "?",
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = student.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = student.email,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+fun StudentCard(
+    student: EnrolledStudent,
+    onUnenroll: () -> Unit
+) {
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -333,8 +454,38 @@ fun StudentCard(student: EnrolledStudent) {
                     )
                 }
             }
+            // Unenroll button
+            IconButton(onClick = { showConfirmDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Unenroll",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("Unenroll Student") },
+            text = { Text("Are you sure you want to unenroll ${student.name} from this module?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onUnenroll()
+                        showConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Unenroll")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
-
-

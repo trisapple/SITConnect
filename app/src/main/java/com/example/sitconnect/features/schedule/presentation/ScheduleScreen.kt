@@ -7,12 +7,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.AuthState
@@ -30,8 +32,12 @@ fun ScheduleScreen(
     val authState by authViewModel.authState.collectAsState()
     val currentUser = (authState as? AuthState.Success)?.user
     val scheduleState by scheduleViewModel.scheduleState.collectAsState()
+    val attendanceCodeState by scheduleViewModel.attendanceCodeState.collectAsState()
+    val attendanceRecordsState by scheduleViewModel.attendanceRecordsState.collectAsState()
 
     var selectedDay by remember { mutableStateOf<Int?>(null) }
+    var showAttendanceCodeDialog by remember { mutableStateOf<ScheduleEntry?>(null) }
+    var showAttendanceRecordsDialog by remember { mutableStateOf<ScheduleEntry?>(null) }
 
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
@@ -134,7 +140,14 @@ fun ScheduleScreen(
                                 )
                             }
                             items(entries) { entry ->
-                                ScheduleEntryCard(entry = entry)
+                                ScheduleEntryCard(
+                                    entry = entry,
+                                    onGenerateCode = { showAttendanceCodeDialog = entry },
+                                    onViewAttendance = {
+                                        showAttendanceRecordsDialog = entry
+                                        scheduleViewModel.fetchAttendanceRecords(entry.id, entry.enrolledStudents)
+                                    }
+                                )
                             }
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -162,10 +175,44 @@ fun ScheduleScreen(
             }
         }
     }
+
+    // Attendance Code Dialog
+    showAttendanceCodeDialog?.let { entry ->
+        AttendanceCodeDialog(
+            entry = entry,
+            isLoading = attendanceCodeState is AttendanceCodeState.Loading,
+            onGenerateCode = {
+                scheduleViewModel.generateAttendanceCode(entry.id)
+            },
+            onClearCode = {
+                scheduleViewModel.clearAttendanceCode(entry.id)
+            },
+            onDismiss = {
+                showAttendanceCodeDialog = null
+                scheduleViewModel.resetAttendanceCodeState()
+            }
+        )
+    }
+
+    // Attendance Records Dialog
+    showAttendanceRecordsDialog?.let { entry ->
+        AttendanceRecordsDialog(
+            entry = entry,
+            attendanceRecordsState = attendanceRecordsState,
+            onDismiss = {
+                showAttendanceRecordsDialog = null
+                scheduleViewModel.clearAttendanceRecords()
+            }
+        )
+    }
 }
 
 @Composable
-fun ScheduleEntryCard(entry: ScheduleEntry) {
+fun ScheduleEntryCard(
+    entry: ScheduleEntry,
+    onGenerateCode: () -> Unit = {},
+    onViewAttendance: () -> Unit = {}
+) {
     val typeColor = when (entry.classType) {
         ClassType.LECTURE -> Color(0xFF2196F3)
         ClassType.TUTORIAL -> Color(0xFF4CAF50)
@@ -263,6 +310,63 @@ fun ScheduleEntryCard(entry: ScheduleEntry) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Attendance Code Section
+                if (entry.attendanceCode.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE8F5E9)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Active Attendance Code",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF2E7D32)
+                                )
+                                Text(
+                                    text = entry.attendanceCode,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1B5E20)
+                                )
+                            }
+                            IconButton(onClick = onGenerateCode) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Regenerate Code",
+                                    tint = Color(0xFF2E7D32)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = onGenerateCode,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Generate Attendance Code")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // View Attendance Button
+                OutlinedButton(
+                    onClick = onViewAttendance,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("View Attendance (${entry.enrolledStudents.size} students)")
+                }
             }
         }
     }
@@ -281,3 +385,299 @@ fun getDayName(day: Int): String {
     }
 }
 
+@Composable
+fun AttendanceCodeDialog(
+    entry: ScheduleEntry,
+    isLoading: Boolean,
+    onGenerateCode: () -> Unit,
+    onClearCode: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        title = { Text("Attendance Code") },
+        text = {
+            Column {
+                Text(
+                    text = "${entry.moduleCode} - ${entry.classType.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${getDayName(entry.dayOfWeek)}, ${entry.startTime} - ${entry.endTime}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = entry.venue,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (entry.attendanceCode.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE3F2FD)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Current Code",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = entry.attendanceCode,
+                                style = MaterialTheme.typography.displaySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Show this code to students",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "No active code",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Generate a code to start taking attendance",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Column {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .align(Alignment.CenterHorizontally)
+                    )
+                } else {
+                    Button(
+                        onClick = onGenerateCode,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (entry.attendanceCode.isEmpty()) "Generate Code" else "Regenerate Code")
+                    }
+
+                    if (entry.attendanceCode.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onClearCode,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("End Attendance")
+                        }
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+fun AttendanceRecordsDialog(
+    entry: ScheduleEntry,
+    attendanceRecordsState: AttendanceRecordsState,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("Attendance Records")
+                Text(
+                    text = "${entry.moduleCode} - ${entry.classType.name}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            when (attendanceRecordsState) {
+                is AttendanceRecordsState.Loading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is AttendanceRecordsState.Success -> {
+                    Column {
+                        // Summary
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "${attendanceRecordsState.presentCount}",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF4CAF50)
+                                    )
+                                    Text(
+                                        text = "Present",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "${attendanceRecordsState.totalCount - attendanceRecordsState.presentCount}",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF44336)
+                                    )
+                                    Text(
+                                        text = "Absent",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "${attendanceRecordsState.totalCount}",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Total",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Student list
+                        if (attendanceRecordsState.records.isEmpty()) {
+                            Text(
+                                text = "No students enrolled",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 300.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(attendanceRecordsState.records) { student ->
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (student.isPresent)
+                                                Color(0xFFE8F5E9)
+                                            else
+                                                Color(0xFFFFEBEE)
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = student.studentName,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = student.studentEmail,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (student.isPresent && student.markedAt != null) {
+                                                    Text(
+                                                        text = "Marked at ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(student.markedAt)} via ${student.markedVia}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF4CAF50)
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                text = if (student.isPresent) "✓" else "✗",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = if (student.isPresent) Color(0xFF4CAF50) else Color(0xFFF44336)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                is AttendanceRecordsState.Error -> {
+                    Text(
+                        text = "Error: ${attendanceRecordsState.message}",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                is AttendanceRecordsState.Idle -> {
+                    // Initial state
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}

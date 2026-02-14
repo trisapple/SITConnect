@@ -18,7 +18,8 @@ sealed class ClassManagementState {
     data class Success(
         val modules: List<Module>,
         val selectedModule: Module? = null,
-        val students: List<EnrolledStudent> = emptyList()
+        val students: List<EnrolledStudent> = emptyList(),
+        val availableStudents: List<EnrolledStudent> = emptyList()
     ) : ClassManagementState()
     data class Error(val message: String) : ClassManagementState()
 }
@@ -51,8 +52,10 @@ class ClassManagementViewModel : ViewModel() {
                                 code = document.getString("code") ?: "",
                                 name = document.getString("name") ?: "",
                                 description = document.getString("description") ?: "",
+                                trimester = document.getString("trimester") ?: "",
                                 lecturerId = document.getString("lecturerId") ?: "",
-                                lecturerName = document.getString("lecturerName") ?: ""
+                                lecturerName = document.getString("lecturerName") ?: "",
+                                enrolledStudents = (document.get("enrolledStudents") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                             )
                         } catch (e: Exception) {
                             null
@@ -77,25 +80,39 @@ class ClassManagementViewModel : ViewModel() {
                     _classState.value = currentState.copy(selectedModule = module, students = emptyList())
                 }
 
-                // Fetch students enrolled in this module
+                // Fetch students from the enrolledStudents array in the module
                 withTimeout(15000L) {
-                    val enrollmentsSnapshot = firestore.collection("module_enrollments")
-                        .whereEqualTo("moduleId", module.id)
-                        .get()
-                        .await()
+                    if (module.enrolledStudents.isEmpty()) {
+                        val state = _classState.value
+                        if (state is ClassManagementState.Success) {
+                            _classState.value = state.copy(students = emptyList())
+                        }
+                        return@withTimeout
+                    }
 
-                    val students = enrollmentsSnapshot.documents.mapNotNull { document ->
+                    // Fetch user details for each enrolled student
+                    val students = mutableListOf<EnrolledStudent>()
+                    for (studentUid in module.enrolledStudents) {
                         try {
-                            EnrolledStudent(
-                                id = document.id,
-                                uid = document.getString("studentUid") ?: "",
-                                name = document.getString("studentName") ?: "",
-                                email = document.getString("studentEmail") ?: "",
-                                studentId = document.getString("studentId") ?: "",
-                                moduleId = document.getString("moduleId") ?: ""
-                            )
+                            val userDoc = firestore.collection("users")
+                                .document(studentUid)
+                                .get()
+                                .await()
+
+                            if (userDoc.exists()) {
+                                students.add(
+                                    EnrolledStudent(
+                                        id = userDoc.id,
+                                        uid = studentUid,
+                                        name = userDoc.getString("name") ?: "",
+                                        email = userDoc.getString("email") ?: "",
+                                        studentId = userDoc.getString("studentId") ?: "",
+                                        moduleId = module.id
+                                    )
+                                )
+                            }
                         } catch (e: Exception) {
-                            null
+                            // Skip this student if fetch fails
                         }
                     }
 
@@ -113,8 +130,98 @@ class ClassManagementViewModel : ViewModel() {
     fun clearSelectedModule() {
         val currentState = _classState.value
         if (currentState is ClassManagementState.Success) {
-            _classState.value = currentState.copy(selectedModule = null, students = emptyList())
+            _classState.value = currentState.copy(selectedModule = null, students = emptyList(), availableStudents = emptyList())
+        }
+    }
+
+    fun fetchAvailableStudents(moduleId: String, enrolledStudentIds: List<String>) {
+        viewModelScope.launch {
+            try {
+                // Fetch all students who are not enrolled in this module
+                val usersSnapshot = firestore.collection("users").get().await()
+                val availableStudents = usersSnapshot.documents.mapNotNull { doc ->
+                    val rolesMap = doc.get("roles") as? Map<*, *>
+                    val isStudent = rolesMap?.get("student") as? Boolean ?: false
+
+                    if (isStudent && !enrolledStudentIds.contains(doc.id)) {
+                        EnrolledStudent(
+                            id = doc.id,
+                            uid = doc.id,
+                            name = doc.getString("name") ?: "",
+                            email = doc.getString("email") ?: "",
+                            studentId = doc.getString("studentId") ?: "",
+                            moduleId = moduleId
+                        )
+                    } else null
+                }
+
+                val state = _classState.value
+                if (state is ClassManagementState.Success) {
+                    _classState.value = state.copy(availableStudents = availableStudents)
+                }
+            } catch (e: Exception) {
+                // Handle error silently
+            }
+        }
+    }
+
+    fun enrollStudent(moduleId: String, studentUid: String) {
+        viewModelScope.launch {
+            try {
+                // Update module's enrolledStudents array
+                firestore.collection("modules")
+                    .document(moduleId)
+                    .update("enrolledStudents", com.google.firebase.firestore.FieldValue.arrayUnion(studentUid))
+                    .await()
+
+                // Also update all schedules for this module
+                val schedulesSnapshot = firestore.collection("schedules")
+                    .whereEqualTo("moduleId", moduleId)
+                    .get()
+                    .await()
+
+                for (scheduleDoc in schedulesSnapshot.documents) {
+                    firestore.collection("schedules")
+                        .document(scheduleDoc.id)
+                        .update("enrolledStudents", com.google.firebase.firestore.FieldValue.arrayUnion(studentUid))
+                        .await()
+                }
+
+                // Refresh modules
+                fetchLecturerModules(currentLecturerId)
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+
+    fun unenrollStudent(moduleId: String, studentUid: String) {
+        viewModelScope.launch {
+            try {
+                // Update module's enrolledStudents array
+                firestore.collection("modules")
+                    .document(moduleId)
+                    .update("enrolledStudents", com.google.firebase.firestore.FieldValue.arrayRemove(studentUid))
+                    .await()
+
+                // Also update all schedules for this module
+                val schedulesSnapshot = firestore.collection("schedules")
+                    .whereEqualTo("moduleId", moduleId)
+                    .get()
+                    .await()
+
+                for (scheduleDoc in schedulesSnapshot.documents) {
+                    firestore.collection("schedules")
+                        .document(scheduleDoc.id)
+                        .update("enrolledStudents", com.google.firebase.firestore.FieldValue.arrayRemove(studentUid))
+                        .await()
+                }
+
+                // Refresh modules
+                fetchLecturerModules(currentLecturerId)
+            } catch (e: Exception) {
+                // Handle error
+            }
         }
     }
 }
-

@@ -5,8 +5,10 @@ data class Module(
     val code: String = "",
     val name: String = "",
     val description: String = "",
+    val trimester: String = "", // e.g., "T2 2025-2026"
     val lecturerId: String = "",
-    val lecturerName: String = ""
+    val lecturerName: String = "",
+    val enrolledStudents: List<String> = emptyList() // List of student UIDs
 )
 
 data class EnrolledStudent(

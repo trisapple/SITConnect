@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.*
 
@@ -16,7 +15,7 @@ sealed class AttendanceState {
     object Idle : AttendanceState()
     object Loading : AttendanceState()
     data class Success(
-        val activeSessions: List<AttendanceSession>,
+        val allSessions: List<AttendanceSession>, // All sessions grouped by day
         val records: List<AttendanceRecord>,
         val summaries: List<StudentAttendanceSummary>
     ) : AttendanceState()
@@ -47,37 +46,45 @@ class AttendanceViewModel : ViewModel() {
             try {
                 _attendanceState.value = AttendanceState.Loading
 
-                // Fetch active sessions
-                val today = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                }.time
-
-                val sessionsSnapshot = firestore.collection("attendance_sessions")
+                // Query schedules where enrolledStudents array contains the current student's UID
+                val schedulesSnapshot = firestore.collection("schedules")
+                    .whereArrayContains("enrolledStudents", studentId)
                     .get()
                     .await()
 
-                val sessions = sessionsSnapshot.documents.mapNotNull { document ->
+                // Get all sessions with dayOfWeek, sorted by day and time
+                val allSessions = schedulesSnapshot.documents.mapNotNull { document ->
                     try {
+                        val classTypeStr = document.getString("classType") ?: "LECTURE"
+                        val sessionType = when (classTypeStr.uppercase()) {
+                            "LAB" -> AttendanceType.LAB
+                            "TUTORIAL" -> AttendanceType.TUTORIAL
+                            else -> AttendanceType.LECTURE
+                        }
+                        val dayOfWeek = document.getLong("dayOfWeek")?.toInt() ?: 1
+
                         AttendanceSession(
                             id = document.id,
+                            scheduleId = document.id,
                             moduleCode = document.getString("moduleCode") ?: "",
                             moduleName = document.getString("moduleName") ?: "",
-                            sessionType = AttendanceType.valueOf(document.getString("sessionType") ?: "LAB"),
-                            sessionDate = document.getTimestamp("sessionDate")?.toDate() ?: Date(),
+                            sessionType = sessionType,
+                            dayOfWeek = dayOfWeek,
+                            sessionDate = Date(),
                             startTime = document.getString("startTime") ?: "",
                             endTime = document.getString("endTime") ?: "",
                             venue = document.getString("venue") ?: "",
-                            qrCode = document.getString("qrCode") ?: "",
+                            attendanceCode = document.getString("attendanceCode") ?: "",
                             latitude = document.getDouble("latitude") ?: 0.0,
                             longitude = document.getDouble("longitude") ?: 0.0,
-                            radiusMeters = document.getLong("radiusMeters")?.toInt() ?: 100
+                            radiusMeters = document.getLong("radiusMeters")?.toInt() ?: 100,
+                            lecturerId = document.getString("lecturerId") ?: "",
+                            lecturerName = document.getString("lecturerName") ?: ""
                         )
                     } catch (e: Exception) {
                         null
                     }
-                }
+                }.sortedWith(compareBy({ it.dayOfWeek }, { it.startTime }))
 
                 // Fetch student's attendance records
                 val recordsSnapshot = firestore.collection("attendance_records")
@@ -90,6 +97,7 @@ class AttendanceViewModel : ViewModel() {
                         AttendanceRecord(
                             id = document.id,
                             sessionId = document.getString("sessionId") ?: "",
+                            scheduleId = document.getString("scheduleId") ?: "",
                             studentId = document.getString("studentId") ?: "",
                             status = AttendanceStatus.valueOf(document.getString("status") ?: "ABSENT"),
                             markedAt = document.getTimestamp("markedAt")?.toDate(),
@@ -102,43 +110,41 @@ class AttendanceViewModel : ViewModel() {
                     }
                 }
 
-                // Use sample data if no sessions found
-                val finalSessions = if (sessions.isEmpty()) getSampleSessions() else sessions
-                val summaries = calculateSummaries(finalSessions, records)
+                val summaries = calculateSummaries(allSessions, records)
 
                 _attendanceState.value = AttendanceState.Success(
-                    activeSessions = finalSessions.filter { isSessionActive(it) },
+                    allSessions = allSessions,
                     records = records,
                     summaries = summaries
                 )
             } catch (e: Exception) {
-                val sampleSessions = getSampleSessions()
-                _attendanceState.value = AttendanceState.Success(
-                    activeSessions = sampleSessions.filter { isSessionActive(it) },
-                    records = emptyList(),
-                    summaries = calculateSummaries(sampleSessions, emptyList())
-                )
+                _attendanceState.value = AttendanceState.Error(e.message ?: "Failed to fetch attendance")
             }
         }
     }
 
-    fun markAttendanceWithQR(sessionId: String, qrCode: String, latitude: Double, longitude: Double) {
+    fun markAttendanceWithCode(sessionId: String, enteredCode: String, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             try {
                 _markAttendanceState.value = MarkAttendanceState.Loading
 
-                // Verify QR code and location
                 val state = _attendanceState.value
                 if (state is AttendanceState.Success) {
-                    val session = state.activeSessions.find { it.id == sessionId }
+                    val session = state.allSessions.find { it.id == sessionId }
                     if (session == null) {
                         _markAttendanceState.value = MarkAttendanceState.Error("Session not found")
                         return@launch
                     }
 
-                    // Check QR code
-                    if (session.qrCode.isNotEmpty() && session.qrCode != qrCode) {
-                        _markAttendanceState.value = MarkAttendanceState.Error("Invalid QR code")
+                    // Check if attendance code is set by lecturer
+                    if (session.attendanceCode.isEmpty()) {
+                        _markAttendanceState.value = MarkAttendanceState.Error("Attendance code not yet generated by lecturer")
+                        return@launch
+                    }
+
+                    // Validate the entered code
+                    if (session.attendanceCode != enteredCode) {
+                        _markAttendanceState.value = MarkAttendanceState.Error("Invalid attendance code")
                         return@launch
                     }
 
@@ -158,10 +164,11 @@ class AttendanceViewModel : ViewModel() {
                     // Mark attendance
                     val recordData = hashMapOf(
                         "sessionId" to sessionId,
+                        "scheduleId" to session.scheduleId,
                         "studentId" to currentStudentId,
                         "status" to AttendanceStatus.PRESENT.name,
                         "markedAt" to com.google.firebase.Timestamp.now(),
-                        "markedVia" to "QR+GPS",
+                        "markedVia" to "CODE+GPS",
                         "latitude" to latitude,
                         "longitude" to longitude
                     )
@@ -173,56 +180,6 @@ class AttendanceViewModel : ViewModel() {
                     _markAttendanceState.value = MarkAttendanceState.Success
 
                     // Refresh attendance
-                    fetchAttendance(currentStudentId)
-                }
-            } catch (e: Exception) {
-                _markAttendanceState.value = MarkAttendanceState.Error(e.message ?: "Failed to mark attendance")
-            }
-        }
-    }
-
-    fun markAttendanceWithGPSOnly(sessionId: String, latitude: Double, longitude: Double) {
-        viewModelScope.launch {
-            try {
-                _markAttendanceState.value = MarkAttendanceState.Loading
-
-                val state = _attendanceState.value
-                if (state is AttendanceState.Success) {
-                    val session = state.activeSessions.find { it.id == sessionId }
-                    if (session == null) {
-                        _markAttendanceState.value = MarkAttendanceState.Error("Session not found")
-                        return@launch
-                    }
-
-                    // Check location
-                    val distance = calculateDistance(
-                        session.latitude, session.longitude,
-                        latitude, longitude
-                    )
-
-                    if (session.latitude != 0.0 && distance > session.radiusMeters) {
-                        _markAttendanceState.value = MarkAttendanceState.Error(
-                            "You are too far from the venue (${distance.toInt()}m away, max ${session.radiusMeters}m)"
-                        )
-                        return@launch
-                    }
-
-                    // Mark attendance
-                    val recordData = hashMapOf(
-                        "sessionId" to sessionId,
-                        "studentId" to currentStudentId,
-                        "status" to AttendanceStatus.PRESENT.name,
-                        "markedAt" to com.google.firebase.Timestamp.now(),
-                        "markedVia" to "GPS",
-                        "latitude" to latitude,
-                        "longitude" to longitude
-                    )
-
-                    firestore.collection("attendance_records")
-                        .add(recordData)
-                        .await()
-
-                    _markAttendanceState.value = MarkAttendanceState.Success
                     fetchAttendance(currentStudentId)
                 }
             } catch (e: Exception) {
@@ -246,13 +203,6 @@ class AttendanceViewModel : ViewModel() {
         return earthRadius * c
     }
 
-    private fun isSessionActive(session: AttendanceSession): Boolean {
-        val today = Calendar.getInstance()
-        val sessionCal = Calendar.getInstance().apply { time = session.sessionDate }
-
-        return today.get(Calendar.YEAR) == sessionCal.get(Calendar.YEAR) &&
-                today.get(Calendar.DAY_OF_YEAR) == sessionCal.get(Calendar.DAY_OF_YEAR)
-    }
 
     private fun calculateSummaries(
         sessions: List<AttendanceSession>,
@@ -260,7 +210,7 @@ class AttendanceViewModel : ViewModel() {
     ): List<StudentAttendanceSummary> {
         return sessions.groupBy { it.moduleCode }.map { (moduleCode, moduleSessions) ->
             val moduleRecords = records.filter { record ->
-                moduleSessions.any { it.id == record.sessionId }
+                moduleSessions.any { it.id == record.sessionId || it.scheduleId == record.scheduleId }
             }
 
             val attended = moduleRecords.count { it.status == AttendanceStatus.PRESENT }
@@ -282,60 +232,4 @@ class AttendanceViewModel : ViewModel() {
             )
         }
     }
-
-    private fun getSampleSessions(): List<AttendanceSession> {
-        val today = Date()
-        val calendar = Calendar.getInstance()
-        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
-
-        // Generate time slots relative to current time
-        fun formatTime(hour: Int): String = String.format("%02d:00", hour)
-
-        // Create sessions - one ongoing, one upcoming, one past
-        return listOf(
-            AttendanceSession(
-                id = "1",
-                moduleCode = "ICT2207",
-                moduleName = "Mobile Security",
-                sessionType = AttendanceType.LAB,
-                sessionDate = today,
-                startTime = formatTime(maxOf(8, currentHour - 1)), // Started 1 hour ago or 8am
-                endTime = formatTime(maxOf(11, currentHour + 2)), // Ends in 2 hours or 11am
-                venue = "SIT Punggol Campus Lab 4A",
-                qrCode = "MSL-2207-LAB4A",
-                latitude = 1.4136, // SIT Punggol Campus coordinates
-                longitude = 103.9123,
-                radiusMeters = 500 // Increased radius for testing
-            ),
-            AttendanceSession(
-                id = "2",
-                moduleCode = "ICT2205",
-                moduleName = "Web Security",
-                sessionType = AttendanceType.TUTORIAL,
-                sessionDate = today,
-                startTime = formatTime(minOf(20, currentHour + 2)), // Upcoming - 2 hours from now
-                endTime = formatTime(minOf(22, currentHour + 4)),
-                venue = "SIT Punggol Campus Tutorial Room 3",
-                qrCode = "WS-2205-TUT3",
-                latitude = 1.4136,
-                longitude = 103.9123,
-                radiusMeters = 500
-            ),
-            AttendanceSession(
-                id = "3",
-                moduleCode = "ICT2104",
-                moduleName = "Software Engineering",
-                sessionType = AttendanceType.LECTURE,
-                sessionDate = today,
-                startTime = formatTime(minOf(21, currentHour + 4)), // Later session
-                endTime = formatTime(minOf(23, currentHour + 6)),
-                venue = "SIT Punggol Campus LT1",
-                qrCode = "SE-2104-LT1",
-                latitude = 1.4136,
-                longitude = 103.9123,
-                radiusMeters = 500
-            )
-        )
-    }
 }
-

@@ -83,7 +83,7 @@ fun HomeScreen(
         FeatureItem(
             title = "Attendance",
             emoji = "✅",
-            description = "Mark attendance via GPS + QR",
+            description = "Mark attendance via GPS + Code",
             route = Screen.Attendance.route,
             color = Color(0xFF9C27B0)
         ),

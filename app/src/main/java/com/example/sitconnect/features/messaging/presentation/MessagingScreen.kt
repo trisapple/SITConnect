@@ -3,8 +3,10 @@ package com.example.sitconnect.features.messaging.presentation
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -385,9 +387,13 @@ fun ChatRoomScreen(
                     contentPadding = PaddingValues(vertical = 16.dp)
                 ) {
                     items(messages) { message ->
+                        val isOwner = message.senderId == currentUserId || message.isCurrentUser
                         MessageBubble(
                             message = message,
-                            isCurrentUser = message.senderId == currentUserId || message.isCurrentUser
+                            isCurrentUser = isOwner,
+                            onDelete = if (isOwner) {
+                                { messagingViewModel.deleteMessage(chatRoom.id, message.id) }
+                            } else null
                         )
                     }
                 }
@@ -505,12 +511,15 @@ fun ChatRoomScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: ChatMessage,
-    isCurrentUser: Boolean
+    isCurrentUser: Boolean,
+    onDelete: (() -> Unit)? = null
 ) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -536,7 +545,13 @@ fun MessageBubble(
                 topEnd = 16.dp,
                 bottomStart = if (isCurrentUser) 16.dp else 4.dp,
                 bottomEnd = if (isCurrentUser) 4.dp else 16.dp
-            )
+            ),
+            modifier = if (onDelete != null) {
+                Modifier.combinedClickable(
+                    onClick = { },
+                    onLongClick = { showDeleteDialog = true }
+                )
+            } else Modifier
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
@@ -617,6 +632,31 @@ fun MessageBubble(
                 )
             }
         }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteDialog && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Message") },
+            text = { Text("Are you sure you want to delete this message?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

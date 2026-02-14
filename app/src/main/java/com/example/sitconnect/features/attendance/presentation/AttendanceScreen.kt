@@ -64,12 +64,8 @@ fun AttendanceScreen(
     val attendanceState by attendanceViewModel.attendanceState.collectAsState()
     val markState by attendanceViewModel.markAttendanceState.collectAsState()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
-    var selectedTab by remember { mutableStateOf(0) }
     var showMarkDialog by remember { mutableStateOf<AttendanceSession?>(null) }
-    var currentLocation by remember { mutableStateOf<Pair<Double, Double>?>(null) }
-    var isLoadingLocation by remember { mutableStateOf(false) }
 
     val locationPermissions = rememberMultiplePermissionsState(
         listOf(
@@ -105,25 +101,10 @@ fun AttendanceScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Mark attendance using GPS + QR Code",
+            text = "Mark attendance using GPS + Attendance Code",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Today's Sessions") }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text("Summary") }
-            )
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -139,64 +120,52 @@ fun AttendanceScreen(
             is AttendanceState.Success -> {
                 val state = attendanceState as AttendanceState.Success
 
-                when (selectedTab) {
-                    0 -> {
-                        if (state.activeSessions.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(64.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text(
-                                        text = "No sessions today",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        } else {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(state.activeSessions) { session ->
-                                    val record = state.records.find { it.sessionId == session.id }
-                                    ActiveSessionCard(
-                                        session = session,
-                                        record = record,
-                                        onMarkAttendance = { showMarkDialog = session }
-                                    )
-                                }
-                            }
+                if (state.allSessions.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "No sessions available",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                    1 -> {
-                        if (state.summaries.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
+                } else {
+                    // Group sessions by day
+                    val groupedByDay = state.allSessions.groupBy { it.dayOfWeek }
+
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        groupedByDay.forEach { (day, sessions) ->
+                            item {
                                 Text(
-                                    text = "No attendance records yet",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = getDayName(day),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 8.dp)
                                 )
                             }
-                        } else {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(state.summaries) { summary ->
-                                    AttendanceSummaryCard(summary = summary)
-                                }
+                            items(sessions) { session ->
+                                val record = state.records.find { it.sessionId == session.id || it.scheduleId == session.scheduleId }
+                                ActiveSessionCard(
+                                    session = session,
+                                    record = record,
+                                    onMarkAttendance = { showMarkDialog = session }
+                                )
                             }
                         }
                     }
@@ -232,11 +201,8 @@ fun AttendanceScreen(
                 showMarkDialog = null
                 attendanceViewModel.resetMarkState()
             },
-            onMarkWithQR = { qrCode, lat, lon ->
-                attendanceViewModel.markAttendanceWithQR(session.id, qrCode, lat, lon)
-            },
-            onMarkWithGPS = { lat, lon ->
-                attendanceViewModel.markAttendanceWithGPSOnly(session.id, lat, lon)
+            onMarkWithCode = { code, lat, lon ->
+                attendanceViewModel.markAttendanceWithCode(session.id, code, lat, lon)
             },
             isLoading = markState is MarkAttendanceState.Loading,
             error = (markState as? MarkAttendanceState.Error)?.message
@@ -360,17 +326,45 @@ fun ActiveSessionCard(
             if (!isMarked) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Button(
-                    onClick = onMarkAttendance,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Mark Attendance")
+                // Show attendance code status
+                if (session.attendanceCode.isEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFFFF3E0)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = Color(0xFFFF9800)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Waiting for lecturer to generate attendance code",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFE65100)
+                            )
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = onMarkAttendance,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Mark Attendance")
+                    }
                 }
             } else {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -498,12 +492,11 @@ fun MarkAttendanceDialog(
     hasLocationPermission: Boolean,
     onRequestPermission: () -> Unit,
     onDismiss: () -> Unit,
-    onMarkWithQR: (String, Double, Double) -> Unit,
-    onMarkWithGPS: (Double, Double) -> Unit,
+    onMarkWithCode: (String, Double, Double) -> Unit,
     isLoading: Boolean,
     error: String?
 ) {
-    var qrCode by remember { mutableStateOf("") }
+    var attendanceCode by remember { mutableStateOf("") }
     var currentLat by remember { mutableStateOf<Double?>(null) }
     var currentLon by remember { mutableStateOf<Double?>(null) }
     var isLoadingLocation by remember { mutableStateOf(false) }
@@ -690,12 +683,12 @@ fun MarkAttendanceDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // QR Code input
+                // Attendance Code input
                 OutlinedTextField(
-                    value = qrCode,
-                    onValueChange = { qrCode = it },
-                    label = { Text("QR Code") },
-                    placeholder = { Text("Enter the QR code shown in class") },
+                    value = attendanceCode,
+                    onValueChange = { attendanceCode = it },
+                    label = { Text("Attendance Code") },
+                    placeholder = { Text("Enter the code shown by lecturer") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading,
                     singleLine = true
@@ -714,11 +707,13 @@ fun MarkAttendanceDialog(
                             text = "Venue: ${session.venue}",
                             style = MaterialTheme.typography.labelSmall
                         )
-                        Text(
-                            text = "Required QR: ${session.qrCode}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        if (session.attendanceCode.isNotEmpty()) {
+                            Text(
+                                text = "⚠️ Attendance code required",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         Text(
                             text = "Max distance: ${session.radiusMeters}m from venue",
                             style = MaterialTheme.typography.labelSmall
@@ -728,38 +723,22 @@ fun MarkAttendanceDialog(
             }
         },
         confirmButton = {
-            Column {
-                Button(
-                    onClick = {
-                        if (currentLat != null && currentLon != null) {
-                            onMarkWithQR(qrCode, currentLat!!, currentLon!!)
-                        }
-                    },
-                    enabled = !isLoading && qrCode.isNotBlank() && currentLat != null && currentLon != null,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Mark with QR + GPS")
+            Button(
+                onClick = {
+                    if (currentLat != null && currentLon != null) {
+                        onMarkWithCode(attendanceCode, currentLat!!, currentLon!!)
                     }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        if (currentLat != null && currentLon != null) {
-                            onMarkWithGPS(currentLat!!, currentLon!!)
-                        }
-                    },
-                    enabled = !isLoading && currentLat != null && currentLon != null,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Mark with GPS Only")
+                },
+                enabled = !isLoading && attendanceCode.isNotBlank() && currentLat != null && currentLon != null,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Mark Attendance")
                 }
             }
         },
@@ -774,3 +753,15 @@ fun MarkAttendanceDialog(
     )
 }
 
+private fun getDayName(day: Int): String {
+    return when (day) {
+        1 -> "Monday"
+        2 -> "Tuesday"
+        3 -> "Wednesday"
+        4 -> "Thursday"
+        5 -> "Friday"
+        6 -> "Saturday"
+        7 -> "Sunday"
+        else -> "Unknown"
+    }
+}
