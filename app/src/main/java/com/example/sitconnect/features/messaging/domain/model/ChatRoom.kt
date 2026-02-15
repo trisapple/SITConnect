@@ -31,7 +31,8 @@ data class ChatMessage(
     val isCurrentUser: Boolean = false,
     val attachmentUrl: String = "",
     val attachmentName: String = "",
-    val attachmentType: String = ""  // "image", "pdf", "video", "audio", "file"
+    val attachmentType: String = "",  // "image", "pdf", "video", "audio", "file"
+    val isEdited: Boolean = false
 )
 
 data class ChatMember(

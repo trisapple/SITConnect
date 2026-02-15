@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -250,20 +249,6 @@ fun ChatRoomListItem(
                             fontWeight = FontWeight.Bold
                         )
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = " ${chatRoom.memberCount}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -353,11 +338,6 @@ fun ChatRoomScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "${chatRoom.memberCount} members",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -393,6 +373,9 @@ fun ChatRoomScreen(
                             isCurrentUser = isOwner,
                             onDelete = if (isOwner) {
                                 { messagingViewModel.deleteMessage(chatRoom.id, message.id) }
+                            } else null,
+                            onEdit = if (isOwner && message.content.isNotEmpty() && !message.content.startsWith("📎")) {
+                                { newContent -> messagingViewModel.editMessage(chatRoom.id, message.id, newContent) }
                             } else null
                         )
                     }
@@ -516,9 +499,12 @@ fun ChatRoomScreen(
 fun MessageBubble(
     message: ChatMessage,
     isCurrentUser: Boolean,
-    onDelete: (() -> Unit)? = null
+    onDelete: (() -> Unit)? = null,
+    onEdit: ((String) -> Unit)? = null
 ) {
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    var showOptionsDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -546,10 +532,10 @@ fun MessageBubble(
                 bottomStart = if (isCurrentUser) 16.dp else 4.dp,
                 bottomEnd = if (isCurrentUser) 4.dp else 16.dp
             ),
-            modifier = if (onDelete != null) {
+            modifier = if (isCurrentUser && (onDelete != null || onEdit != null)) {
                 Modifier.combinedClickable(
                     onClick = { },
-                    onLongClick = { showDeleteDialog = true }
+                    onLongClick = { showOptionsDialog = true }
                 )
             } else Modifier
         ) {
@@ -622,16 +608,123 @@ fun MessageBubble(
                     Spacer(modifier = Modifier.height(2.dp))
                 }
 
-                Text(
-                    text = timeFormat.format(message.timestamp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isCurrentUser)
-                        MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = timeFormat.format(message.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isCurrentUser)
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                    if (message.isEdited) {
+                        Text(
+                            text = "• edited",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isCurrentUser)
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
             }
         }
+    }
+
+    // Options dialog (Edit/Delete) - Using a simpler bottom sheet style dialog
+    if (showOptionsDialog && isCurrentUser) {
+        AlertDialog(
+            onDismissRequest = { showOptionsDialog = false },
+            title = null,
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (onEdit != null && message.content.isNotEmpty() && !message.content.startsWith("📎")) {
+                        Surface(
+                            onClick = {
+                                showOptionsDialog = false
+                                showEditDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "✏️  Edit Message",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                    if (onDelete != null) {
+                        Surface(
+                            onClick = {
+                                showOptionsDialog = false
+                                showDeleteDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Text(
+                                text = "🗑️  Delete Message",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showOptionsDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit dialog
+    if (showEditDialog && onEdit != null) {
+        var editedContent by remember { mutableStateOf(message.content) }
+
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = { Text("Edit Message") },
+            text = {
+                OutlinedTextField(
+                    value = editedContent,
+                    onValueChange = { editedContent = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 5
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editedContent.isNotBlank()) {
+                            onEdit(editedContent)
+                            showEditDialog = false
+                        }
+                    },
+                    enabled = editedContent.isNotBlank()
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Delete confirmation dialog

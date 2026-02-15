@@ -319,6 +319,20 @@ fun SITConnectNavigation(
                         )
 
                         NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.DateRange, contentDescription = "Calendar") },
+                            label = { Text("Calendar Events") },
+                            selected = currentRoute == Screen.Calendar.route,
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    navController.navigate(Screen.Calendar.route)
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+
+                        NavigationDrawerItem(
                             icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Module Management") },
                             label = { Text("Module Management") },
                             selected = currentRoute == Screen.ModuleManagement.route,

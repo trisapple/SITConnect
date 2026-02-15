@@ -57,12 +57,6 @@ fun ScheduleOverviewScreen(
                 text = { Text("By Lecturer") },
                 icon = { Icon(Icons.Default.Person, contentDescription = null) }
             )
-            Tab(
-                selected = selectedTab == 2,
-                onClick = { selectedTab = 2 },
-                text = { Text("Rooms") },
-                icon = { Icon(Icons.Default.Place, contentDescription = null) }
-            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -83,7 +77,6 @@ fun ScheduleOverviewScreen(
                         onDaySelected = { selectedDay = it }
                     )
                     1 -> ByLecturerTab(lecturerGroups = successState.lecturerGroups)
-                    2 -> RoomUtilizationTab(roomUtilization = successState.roomUtilization)
                 }
             }
             is ScheduleOverviewState.Error -> {

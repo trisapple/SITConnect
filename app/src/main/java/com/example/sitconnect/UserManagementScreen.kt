@@ -487,55 +487,55 @@ fun UserManagementCard(
                         )
                     }
                 }
-                Row {
-                    Button(
-                        onClick = { showDialog = true },
-                        enabled = !isUpdating
-                    ) {
-                        Text("Edit Roles")
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More options")
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Roles") },
+                            onClick = {
+                                showMenu = false
+                                showDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            enabled = !isUpdating
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Edit Name") },
+                            onClick = {
+                                showMenu = false
+                                onEditName()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reset Password") },
+                            onClick = {
+                                showMenu = false
+                                onResetPassword()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                        )
+                        if (!isCurrentUser) {
+                            HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("Edit Name") },
+                                text = { Text("Delete User", color = MaterialTheme.colorScheme.error) },
                                 onClick = {
                                     showMenu = false
-                                    onEditName()
+                                    onDeleteUser()
                                 },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             )
-                            DropdownMenuItem(
-                                text = { Text("Reset Password") },
-                                onClick = {
-                                    showMenu = false
-                                    onResetPassword()
-                                },
-                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
-                            )
-                            if (!isCurrentUser) {
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = { Text("Delete User", color = MaterialTheme.colorScheme.error) },
-                                    onClick = {
-                                        showMenu = false
-                                        onDeleteUser()
-                                    },
-                                    leadingIcon = { 
-                                        Icon(
-                                            Icons.Default.Delete, 
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error
-                                        ) 
-                                    }
-                                )
-                            }
                         }
                     }
                 }

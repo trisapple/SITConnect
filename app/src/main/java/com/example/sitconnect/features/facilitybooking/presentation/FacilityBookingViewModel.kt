@@ -139,6 +139,48 @@ class FacilityBookingViewModel : ViewModel() {
                 _bookingFormState.value = BookingFormState.Loading
 
                 withTimeout(15000L) { // 15 second timeout
+                    // Check for existing bookings with same facility and time slot
+                    // We'll fetch all non-cancelled bookings for this facility and check date match
+                    val existingBookingsSnapshot = firestore.collection("facility_bookings")
+                        .whereEqualTo("facilityId", facility.id)
+                        .whereEqualTo("timeSlot", timeSlot)
+                        .get()
+                        .await()
+
+                    // Normalize dates for comparison (compare only year, month, day)
+                    val calendar = Calendar.getInstance()
+                    calendar.time = bookingDate
+                    val bookingYear = calendar.get(Calendar.YEAR)
+                    val bookingMonth = calendar.get(Calendar.MONTH)
+                    val bookingDay = calendar.get(Calendar.DAY_OF_MONTH)
+
+                    // Check if any of the existing bookings conflict
+                    val hasConflict = existingBookingsSnapshot.documents.any { doc ->
+                        val status = doc.getString("status")
+                        if (status == BookingStatus.CANCELLED.name) {
+                            return@any false
+                        }
+
+                        val existingDate = doc.getTimestamp("bookingDate")?.toDate()
+                        if (existingDate != null) {
+                            val existingCal = Calendar.getInstance()
+                            existingCal.time = existingDate
+                            val sameDate = existingCal.get(Calendar.YEAR) == bookingYear &&
+                                    existingCal.get(Calendar.MONTH) == bookingMonth &&
+                                    existingCal.get(Calendar.DAY_OF_MONTH) == bookingDay
+                            sameDate
+                        } else {
+                            false
+                        }
+                    }
+
+                    if (hasConflict) {
+                        _bookingFormState.value = BookingFormState.Error(
+                            "This room is already booked for the selected date and time slot. Please choose a different time or facility."
+                        )
+                        return@withTimeout
+                    }
+
                     val bookingData = hashMapOf(
                         "facilityId" to facility.id,
                         "facilityName" to facility.name,

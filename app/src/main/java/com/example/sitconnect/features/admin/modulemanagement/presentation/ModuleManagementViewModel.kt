@@ -278,7 +278,8 @@ class ModuleManagementViewModel : ViewModel() {
     fun enrollStudent(moduleId: String, studentId: String) {
         viewModelScope.launch {
             try {
-                _state.value = ModuleManagementState.Loading
+                // Keep current state for immediate UI update
+                val currentState = _state.value as? ModuleManagementState.Success
 
                 withTimeout(10000L) {
                     // Add student to module's enrolledStudents array
@@ -298,7 +299,26 @@ class ModuleManagementViewModel : ViewModel() {
                             .await()
                     }
 
-                    fetchAllModules()
+                    // Update state immediately with new student for responsive UI
+                    if (currentState != null) {
+                        val updatedModules = currentState.modules.map { module ->
+                            if (module.id == moduleId) {
+                                module.copy(enrolledStudents = (module.enrolledStudents + studentId).distinct())
+                            } else module
+                        }
+                        val updatedSchedules = currentState.allSchedules.map { schedule ->
+                            if (schedule.moduleId == moduleId) {
+                                schedule.copy(enrolledStudents = (schedule.enrolledStudents + studentId).distinct())
+                            } else schedule
+                        }
+                        // Also update cached schedules
+                        cachedSchedules = updatedSchedules
+
+                        _state.value = currentState.copy(
+                            modules = updatedModules,
+                            allSchedules = updatedSchedules
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.value = ModuleManagementState.Error(e.message ?: "Failed to enroll student")
@@ -309,7 +329,8 @@ class ModuleManagementViewModel : ViewModel() {
     fun unenrollStudent(moduleId: String, studentId: String) {
         viewModelScope.launch {
             try {
-                _state.value = ModuleManagementState.Loading
+                // Keep current state for immediate UI update
+                val currentState = _state.value as? ModuleManagementState.Success
 
                 withTimeout(10000L) {
                     // Remove student from module's enrolledStudents array
@@ -329,7 +350,26 @@ class ModuleManagementViewModel : ViewModel() {
                             .await()
                     }
 
-                    fetchAllModules()
+                    // Update state immediately with student removed for responsive UI
+                    if (currentState != null) {
+                        val updatedModules = currentState.modules.map { module ->
+                            if (module.id == moduleId) {
+                                module.copy(enrolledStudents = module.enrolledStudents.filter { it != studentId })
+                            } else module
+                        }
+                        val updatedSchedules = currentState.allSchedules.map { schedule ->
+                            if (schedule.moduleId == moduleId) {
+                                schedule.copy(enrolledStudents = schedule.enrolledStudents.filter { it != studentId })
+                            } else schedule
+                        }
+                        // Also update cached schedules
+                        cachedSchedules = updatedSchedules
+
+                        _state.value = currentState.copy(
+                            modules = updatedModules,
+                            allSchedules = updatedSchedules
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.value = ModuleManagementState.Error(e.message ?: "Failed to unenroll student")

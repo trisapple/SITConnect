@@ -70,13 +70,29 @@ class MessagingViewModel : ViewModel() {
 
                     val chatRooms = chatRoomsSnapshot.documents.mapNotNull { document ->
                         try {
+                            // Get member count from messages - count unique senders
+                            val messagesSnapshot = firestore.collection("chat_rooms")
+                                .document(document.id)
+                                .collection("messages")
+                                .get()
+                                .await()
+
+                            val uniqueSenders = messagesSnapshot.documents
+                                .mapNotNull { it.getString("senderId") }
+                                .toSet()
+                                .size
+
+                            // Use at least 1 if there's a stored memberCount, or the unique senders count
+                            val storedMemberCount = document.getLong("memberCount")?.toInt() ?: 0
+                            val actualMemberCount = maxOf(storedMemberCount, uniqueSenders)
+
                             ChatRoom(
                                 id = document.id,
                                 name = document.getString("name") ?: "",
                                 description = document.getString("description") ?: "",
                                 type = ChatRoomType.valueOf(document.getString("type") ?: "GENERAL"),
                                 moduleCode = document.getString("moduleCode"),
-                                memberCount = document.getLong("memberCount")?.toInt() ?: 0,
+                                memberCount = actualMemberCount,
                                 lastMessage = document.getString("lastMessage"),
                                 lastMessageTime = document.getTimestamp("lastMessageTime")?.toDate(),
                                 imageUrl = document.getString("imageUrl") ?: ""
@@ -132,7 +148,8 @@ class MessagingViewModel : ViewModel() {
                                 isCurrentUser = senderId == currentUserId,
                                 attachmentUrl = document.getString("attachmentUrl") ?: "",
                                 attachmentName = document.getString("attachmentName") ?: "",
-                                attachmentType = document.getString("attachmentType") ?: ""
+                                attachmentType = document.getString("attachmentType") ?: "",
+                                isEdited = document.getBoolean("isEdited") ?: false
                             )
                         } catch (e: Exception) {
                             null
@@ -273,6 +290,7 @@ class MessagingViewModel : ViewModel() {
     fun deleteMessage(chatRoomId: String, messageId: String) {
         viewModelScope.launch {
             try {
+                // Delete the message
                 firestore.collection("chat_rooms")
                     .document(chatRoomId)
                     .collection("messages")
@@ -280,10 +298,96 @@ class MessagingViewModel : ViewModel() {
                     .delete()
                     .await()
 
+                // Get the latest message to update lastMessage in chat room
+                val latestMessageSnapshot = firestore.collection("chat_rooms")
+                    .document(chatRoomId)
+                    .collection("messages")
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .limit(1)
+                    .get()
+                    .await()
+
+                val latestMessage = latestMessageSnapshot.documents.firstOrNull()
+
+                // Update chat room with new lastMessage (or clear it if no messages left)
+                if (latestMessage != null) {
+                    val lastMessageText = latestMessage.getString("content") ?: ""
+                    val lastMessageTime = latestMessage.getTimestamp("timestamp")
+
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .update(
+                            mapOf(
+                                "lastMessage" to lastMessageText,
+                                "lastMessageTime" to lastMessageTime
+                            )
+                        )
+                        .await()
+                } else {
+                    // No messages left, clear both lastMessage and lastMessageTime
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .update(
+                            mapOf(
+                                "lastMessage" to com.google.firebase.firestore.FieldValue.delete(),
+                                "lastMessageTime" to com.google.firebase.firestore.FieldValue.delete()
+                            )
+                        )
+                        .await()
+                }
+
+                // Refresh messages and chat rooms
+                fetchMessages(chatRoomId)
+                fetchChatRooms(currentUserId, currentUserName)
+            } catch (e: Exception) {
+                // Handle error silently but still refresh
+                fetchMessages(chatRoomId)
+                fetchChatRooms(currentUserId, currentUserName)
+            }
+        }
+    }
+
+    fun editMessage(chatRoomId: String, messageId: String, newContent: String) {
+        viewModelScope.launch {
+            try {
+                _sendMessageState.value = SendMessageState.Loading
+
+                // Update both content and isEdited flag
+                firestore.collection("chat_rooms")
+                    .document(chatRoomId)
+                    .collection("messages")
+                    .document(messageId)
+                    .update(
+                        mapOf(
+                            "content" to newContent,
+                            "isEdited" to true
+                        )
+                    )
+                    .await()
+
+                // Check if this was the last message and update chat room if so
+                val latestMessageSnapshot = firestore.collection("chat_rooms")
+                    .document(chatRoomId)
+                    .collection("messages")
+                    .orderBy("timestamp", Query.Direction.DESCENDING)
+                    .limit(1)
+                    .get()
+                    .await()
+
+                val latestMessage = latestMessageSnapshot.documents.firstOrNull()
+                if (latestMessage?.id == messageId) {
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .update("lastMessage", newContent)
+                        .await()
+                }
+
+                _sendMessageState.value = SendMessageState.Success
+
                 // Refresh messages
                 fetchMessages(chatRoomId)
             } catch (e: Exception) {
-                // Handle error silently
+                _sendMessageState.value = SendMessageState.Error(e.message ?: "Failed to edit message")
             }
         }
     }

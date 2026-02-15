@@ -55,13 +55,37 @@ class ScheduleOverviewViewModel : ViewModel() {
                 _state.value = ScheduleOverviewState.Loading
 
                 withTimeout(15000L) {
-                    val snapshot = firestore.collection("schedules").get().await()
+                    // Fetch schedules, modules, and users
+                    val schedulesSnapshot = firestore.collection("schedules").get().await()
+                    val modulesSnapshot = firestore.collection("modules").get().await()
+                    val usersSnapshot = firestore.collection("users").get().await()
 
-                    val schedules = snapshot.documents.mapNotNull { doc ->
+                    // Get all valid student IDs (users with student role)
+                    val validStudentIds = usersSnapshot.documents.mapNotNull { doc ->
+                        val roles = doc.get("roles") as? Map<*, *>
+                        if (roles?.get("student") == true) doc.id else null
+                    }.toSet()
+
+                    // Build a map of moduleId -> enrolledStudents from modules (source of truth)
+                    // Filter to only include valid student IDs
+                    val moduleEnrollments = modulesSnapshot.documents.associate { doc ->
+                        val moduleId = doc.id
+                        val enrolledStudents = (doc.get("enrolledStudents") as? List<*>)
+                            ?.mapNotNull { it as? String }
+                            ?.filter { validStudentIds.contains(it) }  // Only count valid students
+                            ?: emptyList()
+                        moduleId to enrolledStudents
+                    }
+
+                    val schedules = schedulesSnapshot.documents.mapNotNull { doc ->
                         try {
+                            val moduleId = doc.getString("moduleId") ?: ""
+                            // Use student list from module (source of truth) - already filtered
+                            val enrolledStudents = moduleEnrollments[moduleId] ?: emptyList()
+
                             ScheduleEntry(
                                 id = doc.id,
-                                moduleId = doc.getString("moduleId") ?: "",
+                                moduleId = moduleId,
                                 moduleCode = doc.getString("moduleCode") ?: "",
                                 moduleName = doc.getString("moduleName") ?: "",
                                 classType = try {
@@ -73,8 +97,7 @@ class ScheduleOverviewViewModel : ViewModel() {
                                 venue = doc.getString("venue") ?: "",
                                 lecturerId = doc.getString("lecturerId") ?: "",
                                 lecturerName = doc.getString("lecturerName") ?: "",
-                                enrolledStudents = (doc.get("enrolledStudents") as? List<*>)
-                                    ?.mapNotNull { it as? String } ?: emptyList(),
+                                enrolledStudents = enrolledStudents,
                                 latitude = doc.getDouble("latitude") ?: 0.0,
                                 longitude = doc.getDouble("longitude") ?: 0.0,
                                 radiusMeters = doc.getLong("radiusMeters")?.toInt() ?: 100,

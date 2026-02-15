@@ -29,11 +29,21 @@ sealed class UserDataState {
     data class Error(val message: String) : UserDataState()
 }
 
+sealed class UpdateNameState {
+    object Idle : UpdateNameState()
+    object Loading : UpdateNameState()
+    object Success : UpdateNameState()
+    data class Error(val message: String) : UpdateNameState()
+}
+
 class UserViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 
     private val _userDataState = MutableStateFlow<UserDataState>(UserDataState.Idle)
     val userDataState: StateFlow<UserDataState> = _userDataState
+
+    private val _updateNameState = MutableStateFlow<UpdateNameState>(UpdateNameState.Idle)
+    val updateNameState: StateFlow<UpdateNameState> = _updateNameState
 
     fun fetchUserData(uid: String) {
         viewModelScope.launch {
@@ -66,6 +76,30 @@ class UserViewModel : ViewModel() {
                 _userDataState.value = UserDataState.Error(e.message ?: "Failed to fetch user data")
             }
         }
+    }
+
+    fun updateUserName(uid: String, newName: String) {
+        viewModelScope.launch {
+            try {
+                _updateNameState.value = UpdateNameState.Loading
+
+                withTimeout(10000L) {
+                    firestore.collection("users").document(uid)
+                        .update("name", newName)
+                        .await()
+
+                    _updateNameState.value = UpdateNameState.Success
+                }
+            } catch (e: TimeoutCancellationException) {
+                _updateNameState.value = UpdateNameState.Error("Request timed out. Please check your internet connection.")
+            } catch (e: Exception) {
+                _updateNameState.value = UpdateNameState.Error(e.message ?: "Failed to update name")
+            }
+        }
+    }
+
+    fun resetUpdateNameState() {
+        _updateNameState.value = UpdateNameState.Idle
     }
 
     fun resetUserDataState() {

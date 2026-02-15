@@ -33,7 +33,7 @@ fun ModuleManagementScreen(
     var showEditDialog by remember { mutableStateOf<AdminModule?>(null) }
     var showDeleteDialog by remember { mutableStateOf<AdminModule?>(null) }
     var showAssignDialog by remember { mutableStateOf<AdminModule?>(null) }
-    var showEnrollmentDialog by remember { mutableStateOf<AdminModule?>(null) }
+    var showEnrollmentDialog by remember { mutableStateOf<String?>(null) }  // Uses module ID for fresh data
     var showScheduleDialog by remember { mutableStateOf<AdminModule?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -117,13 +117,18 @@ fun ModuleManagementScreen(
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(filteredModules, key = { it.id }) { module ->
                                 val scheduleCount = successState.allSchedules.count { it.moduleId == module.id }
+                                // Calculate actual enrolled count by matching with existing students
+                                val actualEnrolledCount = successState.allStudents.count { student ->
+                                    module.enrolledStudents.contains(student.id)
+                                }
                                 ModuleCard(
                                     module = module,
+                                    enrolledStudentCount = actualEnrolledCount,
                                     scheduleCount = scheduleCount,
                                     onEdit = { showEditDialog = module },
                                     onDelete = { showDeleteDialog = module },
                                     onAssignLecturer = { showAssignDialog = module },
-                                    onManageStudents = { showEnrollmentDialog = module },
+                                    onManageStudents = { showEnrollmentDialog = module.id },
                                     onManageSchedule = { showScheduleDialog = module }
                                 )
                             }
@@ -213,22 +218,24 @@ fun ModuleManagementScreen(
         )
     }
 
-    showEnrollmentDialog?.let { module ->
+    showEnrollmentDialog?.let { moduleId ->
         // Get fresh module data from state to ensure student count is up to date
-        val currentModule = (state as? ModuleManagementState.Success)?.modules?.find { it.id == module.id } ?: module
+        val currentModule = (state as? ModuleManagementState.Success)?.modules?.find { it.id == moduleId }
 
-        StudentEnrollmentDialog(
-            module = currentModule,
-            allStudents = allStudents,
-            currentEnrolledStudentIds = currentModule.enrolledStudents,
-            onDismiss = { showEnrollmentDialog = null },
-            onEnroll = { studentId ->
-                viewModel.enrollStudent(currentModule.id, studentId)
-            },
-            onUnenroll = { studentId ->
-                viewModel.unenrollStudent(currentModule.id, studentId)
-            }
-        )
+        if (currentModule != null) {
+            StudentEnrollmentDialog(
+                module = currentModule,
+                allStudents = allStudents,
+                currentEnrolledStudentIds = currentModule.enrolledStudents,
+                onDismiss = { showEnrollmentDialog = null },
+                onEnroll = { studentId ->
+                    viewModel.enrollStudent(currentModule.id, studentId)
+                },
+                onUnenroll = { studentId ->
+                    viewModel.unenrollStudent(currentModule.id, studentId)
+                }
+            )
+        }
     }
 
     showScheduleDialog?.let { module ->
@@ -297,6 +304,7 @@ fun ModuleManagementScreen(
 @Composable
 private fun ModuleCard(
     module: AdminModule,
+    enrolledStudentCount: Int,
     scheduleCount: Int,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -393,7 +401,7 @@ private fun ModuleCard(
             ) {
                 AssistChip(
                     onClick = onManageStudents,
-                    label = { Text("${module.enrolledStudents.size} Students") },
+                    label = { Text("$enrolledStudentCount Students") },
                     leadingIcon = { Icon(Icons.Default.Face, contentDescription = null, modifier = Modifier.size(16.dp)) }
                 )
                 AssistChip(

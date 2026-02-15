@@ -145,6 +145,13 @@ fun HomeScreen(
             color = Color(0xFFF44336)
         ),
         FeatureItem(
+            title = "Calendar Events",
+            emoji = "📅",
+            description = "Manage calendar events",
+            route = Screen.Calendar.route,
+            color = Color(0xFF2196F3)
+        ),
+        FeatureItem(
             title = "Module Management",
             emoji = "📚",
             description = "Create/Edit/Delete modules",

@@ -20,11 +20,21 @@ sealed class CalendarState {
     data class Error(val message: String) : CalendarState()
 }
 
+sealed class CalendarOperationState {
+    object Idle : CalendarOperationState()
+    object Loading : CalendarOperationState()
+    object Success : CalendarOperationState()
+    data class Error(val message: String) : CalendarOperationState()
+}
+
 class CalendarViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
 
     private val _calendarState = MutableStateFlow<CalendarState>(CalendarState.Idle)
     val calendarState: StateFlow<CalendarState> = _calendarState
+
+    private val _operationState = MutableStateFlow<CalendarOperationState>(CalendarOperationState.Idle)
+    val operationState: StateFlow<CalendarOperationState> = _operationState
 
     private val _selectedTrimester = MutableStateFlow(getCurrentTrimester())
     val selectedTrimester: StateFlow<Int> = _selectedTrimester
@@ -91,6 +101,108 @@ class CalendarViewModel : ViewModel() {
                 _calendarState.value = CalendarState.Error(e.message ?: "Failed to fetch calendar events")
             }
         }
+    }
+
+    fun createCalendarEvent(
+        title: String,
+        description: String,
+        startDate: Date,
+        endDate: Date,
+        eventType: EventType,
+        trimester: Int
+    ) {
+        viewModelScope.launch {
+            try {
+                _operationState.value = CalendarOperationState.Loading
+
+                withTimeout(10000L) {
+                    val eventData = hashMapOf(
+                        "title" to title,
+                        "description" to description,
+                        "startDate" to com.google.firebase.Timestamp(startDate),
+                        "endDate" to com.google.firebase.Timestamp(endDate),
+                        "eventType" to eventType.name,
+                        "trimester" to trimester
+                    )
+
+                    firestore.collection("calendar_events")
+                        .add(eventData)
+                        .await()
+
+                    _operationState.value = CalendarOperationState.Success
+                    fetchCalendarEvents()
+                }
+            } catch (e: TimeoutCancellationException) {
+                _operationState.value = CalendarOperationState.Error("Request timed out.")
+            } catch (e: Exception) {
+                _operationState.value = CalendarOperationState.Error(e.message ?: "Failed to create event")
+            }
+        }
+    }
+
+    fun updateCalendarEvent(
+        eventId: String,
+        title: String,
+        description: String,
+        startDate: Date,
+        endDate: Date,
+        eventType: EventType,
+        trimester: Int
+    ) {
+        viewModelScope.launch {
+            try {
+                _operationState.value = CalendarOperationState.Loading
+
+                withTimeout(10000L) {
+                    val updates = mapOf(
+                        "title" to title,
+                        "description" to description,
+                        "startDate" to com.google.firebase.Timestamp(startDate),
+                        "endDate" to com.google.firebase.Timestamp(endDate),
+                        "eventType" to eventType.name,
+                        "trimester" to trimester
+                    )
+
+                    firestore.collection("calendar_events")
+                        .document(eventId)
+                        .update(updates)
+                        .await()
+
+                    _operationState.value = CalendarOperationState.Success
+                    fetchCalendarEvents()
+                }
+            } catch (e: TimeoutCancellationException) {
+                _operationState.value = CalendarOperationState.Error("Request timed out.")
+            } catch (e: Exception) {
+                _operationState.value = CalendarOperationState.Error(e.message ?: "Failed to update event")
+            }
+        }
+    }
+
+    fun deleteCalendarEvent(eventId: String) {
+        viewModelScope.launch {
+            try {
+                _operationState.value = CalendarOperationState.Loading
+
+                withTimeout(10000L) {
+                    firestore.collection("calendar_events")
+                        .document(eventId)
+                        .delete()
+                        .await()
+
+                    _operationState.value = CalendarOperationState.Success
+                    fetchCalendarEvents()
+                }
+            } catch (e: TimeoutCancellationException) {
+                _operationState.value = CalendarOperationState.Error("Request timed out.")
+            } catch (e: Exception) {
+                _operationState.value = CalendarOperationState.Error(e.message ?: "Failed to delete event")
+            }
+        }
+    }
+
+    fun resetOperationState() {
+        _operationState.value = CalendarOperationState.Idle
     }
 }
 
