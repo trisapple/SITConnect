@@ -41,10 +41,48 @@ class FacilityBookingViewModel : ViewModel() {
     private val _selectedFacilityType = MutableStateFlow<FacilityType?>(null)
     val selectedFacilityType: StateFlow<FacilityType?> = _selectedFacilityType
 
+    private val _bookedSlotsForDate = MutableStateFlow<Set<String>>(emptySet())
+    val bookedSlotsForDate: StateFlow<Set<String>> = _bookedSlotsForDate
+
     private var currentUserId: String = ""
 
     fun setSelectedFacilityType(type: FacilityType?) {
         _selectedFacilityType.value = type
+    }
+
+    /** Fetches non-cancelled bookings for [facilityId] on [date] and stores their time slot strings. */
+    fun fetchBookedSlotsForDate(facilityId: String, date: Date) {
+        viewModelScope.launch {
+            try {
+                _bookedSlotsForDate.value = emptySet()
+                val cal = Calendar.getInstance().apply { time = date }
+                val year  = cal.get(Calendar.YEAR)
+                val month = cal.get(Calendar.MONTH)
+                val day   = cal.get(Calendar.DAY_OF_MONTH)
+
+                val snapshot = firestore.collection("facility_bookings")
+                    .whereEqualTo("facilityId", facilityId)
+                    .get().await()
+
+                val booked = snapshot.documents.mapNotNull { doc ->
+                    if (doc.getString("status") == BookingStatus.CANCELLED.name) return@mapNotNull null
+                    val existing = doc.getTimestamp("bookingDate")?.toDate() ?: return@mapNotNull null
+                    val existingCal = Calendar.getInstance().apply { time = existing }
+                    val sameDay = existingCal.get(Calendar.YEAR)  == year &&
+                                  existingCal.get(Calendar.MONTH) == month &&
+                                  existingCal.get(Calendar.DAY_OF_MONTH) == day
+                    if (sameDay) doc.getString("timeSlot") else null
+                }.toSet()
+
+                _bookedSlotsForDate.value = booked
+            } catch (e: Exception) {
+                _bookedSlotsForDate.value = emptySet()
+            }
+        }
+    }
+
+    fun clearBookedSlotsForDate() {
+        _bookedSlotsForDate.value = emptySet()
     }
 
     fun fetchFacilities(userId: String) {

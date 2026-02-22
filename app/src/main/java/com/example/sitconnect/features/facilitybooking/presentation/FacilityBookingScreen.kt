@@ -37,6 +37,7 @@ fun FacilityBookingScreen(
     val facilityState by facilityViewModel.facilityState.collectAsState()
     val bookingFormState by facilityViewModel.bookingFormState.collectAsState()
     val selectedType by facilityViewModel.selectedFacilityType.collectAsState()
+    val bookedSlotsForDate by facilityViewModel.bookedSlotsForDate.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
     var selectedFacility by remember { mutableStateOf<Facility?>(null) }
@@ -47,10 +48,18 @@ fun FacilityBookingScreen(
         }
     }
 
+    // Pre-fetch booked slots for today whenever a facility dialog opens
+    LaunchedEffect(selectedFacility) {
+        selectedFacility?.let { facility ->
+            facilityViewModel.fetchBookedSlotsForDate(facility.id, Date())
+        } ?: facilityViewModel.clearBookedSlotsForDate()
+    }
+
     LaunchedEffect(bookingFormState) {
         if (bookingFormState is BookingFormState.Success) {
             selectedFacility = null
             facilityViewModel.resetBookingFormState()
+            facilityViewModel.clearBookedSlotsForDate()
         }
     }
 
@@ -224,10 +233,12 @@ fun FacilityBookingScreen(
     selectedFacility?.let { facility ->
         BookFacilityDialog(
             facility = facility,
-            userName = currentUser?.email ?: "",
+            bookedSlots = bookedSlotsForDate,
+            onDateSelected = { date -> facilityViewModel.fetchBookedSlotsForDate(facility.id, date) },
             onDismiss = {
                 selectedFacility = null
                 facilityViewModel.resetBookingFormState()
+                facilityViewModel.clearBookedSlotsForDate()
             },
             onBook = { date, timeSlot, purpose ->
                 facilityViewModel.bookFacility(
@@ -502,21 +513,34 @@ fun BookingCard(
 @Composable
 fun BookFacilityDialog(
     facility: Facility,
-    userName: String,
+    bookedSlots: Set<String>,
+    onDateSelected: (Date) -> Unit,
     onDismiss: () -> Unit,
     onBook: (Date, String, String) -> Unit,
     isLoading: Boolean,
     error: String?
 ) {
     val context = LocalContext.current
-    val calendar = Calendar.getInstance()
+    val today = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
     val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
-    var selectedDate by remember { mutableStateOf(Date()) }
+    var selectedDate by remember { mutableStateOf(today.time) }
     var selectedSlot by remember { mutableStateOf<TimeSlot?>(null) }
     var purpose by remember { mutableStateOf("") }
 
-    val availableSlots = facility.availableSlots.filter { it.isAvailable }
+    // Only show slots the facility has marked available
+    val facilitySlots = facility.availableSlots.filter { it.isAvailable }
+
+    // Deselect chosen slot if it becomes booked after a date change
+    LaunchedEffect(bookedSlots) {
+        val key = selectedSlot?.let { "${it.startTime} - ${it.endTime}" }
+        if (key != null && key in bookedSlots) selectedSlot = null
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
@@ -538,18 +562,25 @@ fun BookFacilityDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                // Date picker — past dates are blocked via minDate
                 OutlinedButton(
                     onClick = {
-                        DatePickerDialog(
+                        val picker = DatePickerDialog(
                             context,
                             { _, year, month, dayOfMonth ->
-                                calendar.set(year, month, dayOfMonth)
-                                selectedDate = calendar.time
+                                val newCal = Calendar.getInstance()
+                                newCal.set(year, month, dayOfMonth, 0, 0, 0)
+                                newCal.set(Calendar.MILLISECOND, 0)
+                                selectedDate = newCal.time
+                                selectedSlot = null          // reset slot on date change
+                                onDateSelected(selectedDate)
                             },
-                            calendar.get(Calendar.YEAR),
-                            calendar.get(Calendar.MONTH),
-                            calendar.get(Calendar.DAY_OF_MONTH)
-                        ).show()
+                            today.get(Calendar.YEAR),
+                            today.get(Calendar.MONTH),
+                            today.get(Calendar.DAY_OF_MONTH)
+                        )
+                        picker.datePicker.minDate = today.timeInMillis  // block past dates
+                        picker.show()
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading
@@ -567,15 +598,21 @@ fun BookFacilityDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(availableSlots) { slot ->
+                // Show all slots; disable + label booked ones
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(facilitySlots) { slot ->
+                        val slotKey = "${slot.startTime} - ${slot.endTime}"
+                        val isBooked = slotKey in bookedSlots
                         FilterChip(
                             selected = selectedSlot == slot,
-                            onClick = { selectedSlot = slot },
-                            label = { Text("${slot.startTime}-${slot.endTime}") },
-                            enabled = !isLoading
+                            onClick = { if (!isBooked) selectedSlot = slot },
+                            label = {
+                                Text(
+                                    if (isBooked) "${slot.startTime}-${slot.endTime} (Booked)"
+                                    else "${slot.startTime}-${slot.endTime}"
+                                )
+                            },
+                            enabled = !isLoading && !isBooked
                         )
                     }
                 }
@@ -603,20 +640,14 @@ fun BookFacilityDialog(
                 enabled = !isLoading && selectedSlot != null
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
                     Text("Confirm Booking")
                 }
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isLoading
-            ) {
+            TextButton(onClick = onDismiss, enabled = !isLoading) {
                 Text("Cancel")
             }
         }
