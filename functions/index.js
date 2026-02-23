@@ -46,6 +46,7 @@ exports.sendWelcomeEmail = functions.auth.user().onCreate((user) => {
     email: email,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     name: "Test",
+    isOnboarded: false,
     roles: {
         "student": true,
         "lecturer": false,
@@ -115,8 +116,9 @@ exports.createUser = functions.https.onCall(async (data, context) => {
     // Create the user document in Firestore
     await admin.firestore().collection('users').doc(userRecord.uid).set({
       email: email,
-      name: name,
+      name: 'Test',
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      isOnboarded: false,
       roles: {
         student: roles?.student || false,
         lecturer: roles?.lecturer || false,

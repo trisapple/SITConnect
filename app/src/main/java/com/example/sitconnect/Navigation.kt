@@ -59,6 +59,7 @@ import com.example.sitconnect.features.admin.mcreview.presentation.MCReviewScree
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
+    object Onboarding : Screen("onboarding")
     object Home : Screen("home")
     object Profile : Screen("profile")
     object UserManagement : Screen("user_management")
@@ -100,10 +101,36 @@ fun SITConnectNavigation(
     val isLecturer = userData?.roles?.lecturer == true
     val isStudent = userData?.roles?.student == true
 
-    // Fetch user data when authenticated to check admin status
+    // Fetch user data when authenticated
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
             userViewModel.fetchUserData(uid)
+        }
+    }
+
+    // Route after login: wait for user data to load, then decide home vs onboarding
+    LaunchedEffect(authState, userDataState) {
+        val isLoggedIn = authState is AuthState.Success
+        val dataLoaded = userDataState is UserDataState.Success
+
+        if (isLoggedIn && dataLoaded) {
+            val data = (userDataState as UserDataState.Success).userData
+            val route = navController.currentBackStackEntry?.destination?.route
+            if (!data.isOnboarded) {
+                // First-time user: send to onboarding (from any screen except onboarding itself)
+                if (route != Screen.Onboarding.route) {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            } else {
+                // Already onboarded: send to home only if on login screen
+                if (route == Screen.Login.route || route == null) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            }
         }
     }
 
@@ -114,8 +141,10 @@ fun SITConnectNavigation(
         Screen.Login.route
     }
 
-    // Only show drawer for authenticated screens
-    val showDrawer = authState is AuthState.Success && currentRoute != Screen.Login.route
+    // Only show drawer for authenticated screens (not login or onboarding)
+    val showDrawer = authState is AuthState.Success &&
+        currentRoute != Screen.Login.route &&
+        currentRoute != Screen.Onboarding.route
 
     if (showDrawer) {
         ModalNavigationDrawer(
@@ -420,6 +449,7 @@ fun SITConnectNavigation(
                         onClick = {
                             scope.launch {
                                 drawerState.close()
+                                userViewModel.resetUserDataState()
                                 viewModel.logout()
                                 navController.navigate(Screen.Login.route) {
                                     popUpTo(0) { inclusive = true }
@@ -473,7 +503,7 @@ fun SITConnectNavigation(
                         }
                     )
                 }
-            ) { paddingValues ->
+                ) { paddingValues ->
                 NavHost(
                     navController = navController,
                     startDestination = startDestination,
@@ -483,8 +513,18 @@ fun SITConnectNavigation(
                         LoginScreen(
                             viewModel = viewModel,
                             onLoginSuccess = {
-                                navController.navigate(Screen.Home.route) {
-                                    popUpTo(Screen.Login.route) { inclusive = true }
+                                // Routing handled by LaunchedEffect(authState, userDataState)
+                            }
+                        )
+                    }
+
+                    composable(Screen.Onboarding.route) {
+                        OnboardingScreen(
+                            authViewModel = viewModel,
+                            userViewModel = userViewModel,
+                            onOnboardingComplete = {
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(0) { inclusive = true }
                                 }
                             }
                         )
@@ -581,8 +621,18 @@ fun SITConnectNavigation(
                 LoginScreen(
                     viewModel = viewModel,
                     onLoginSuccess = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
+                        // Routing handled by LaunchedEffect(authState, userDataState)
+                    }
+                )
+            }
+
+            composable(Screen.Onboarding.route) {
+                OnboardingScreen(
+                    authViewModel = viewModel,
+                    userViewModel = userViewModel,
+                    onOnboardingComplete = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )

@@ -546,6 +546,9 @@ fun UserManagementCard(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (!user.isOnboarded) {
+                    RoleBadge("Pending Setup", MaterialTheme.colorScheme.outline)
+                }
                 if (user.roles?.admin == true) {
                     RoleBadge("Admin", MaterialTheme.colorScheme.error)
                 }
@@ -687,12 +690,10 @@ fun CreateUserDialog(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf("student") }
 
     var emailError by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf(false) }
-    var nameError by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
@@ -705,21 +706,9 @@ fun CreateUserDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Enter user details:",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        nameError = it.isBlank()
-                    },
-                    label = { Text("Name") },
-                    isError = nameError,
-                    enabled = !isLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                    text = "Enter user credentials. The user will set their name and contact number on first login.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 OutlinedTextField(
@@ -741,7 +730,7 @@ fun CreateUserDialog(
                         password = it
                         passwordError = it.length < 6
                     },
-                    label = { Text("Password") },
+                    label = { Text("Temporary Password") },
                     isError = passwordError,
                     enabled = !isLoading,
                     visualTransformation = PasswordVisualTransformation(),
@@ -810,14 +799,13 @@ fun CreateUserDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val hasErrors = email.isBlank() || !email.contains("@") ||
-                                   password.length < 6 || name.isBlank()
+                    val hasErrors = email.isBlank() || !email.contains("@") || password.length < 6
 
                     if (!hasErrors) {
                         onConfirm(
                             email,
                             password,
-                            name,
+                            "Test", // default name – user sets it during onboarding
                             UserRoles(
                                 student = selectedRole == "student",
                                 lecturer = selectedRole == "lecturer",
@@ -827,7 +815,6 @@ fun CreateUserDialog(
                     } else {
                         emailError = email.isBlank() || !email.contains("@")
                         passwordError = password.length < 6
-                        nameError = name.isBlank()
                     }
                 },
                 enabled = !isLoading

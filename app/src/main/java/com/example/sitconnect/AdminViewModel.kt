@@ -13,7 +13,8 @@ data class UserListItem(
     val uid: String = "",
     val name: String? = null,
     val email: String? = null,
-    val roles: UserRoles? = null
+    val roles: UserRoles? = null,
+    val isOnboarded: Boolean = true
 )
 
 sealed class UsersListState {
@@ -90,6 +91,7 @@ class AdminViewModel : ViewModel() {
                     val uid = document.id
                     val name = document.getString("name")
                     val email = document.getString("email")
+                    val isOnboarded = document.getBoolean("isOnboarded") ?: true
                     val rolesMap = document.get("roles") as? Map<*, *>
                     val roles = rolesMap?.let {
                         UserRoles(
@@ -98,7 +100,7 @@ class AdminViewModel : ViewModel() {
                             admin = it["admin"] as? Boolean ?: false
                         )
                     }
-                    UserListItem(uid = uid, name = name, email = email, roles = roles)
+                    UserListItem(uid = uid, name = name, email = email, roles = roles, isOnboarded = isOnboarded)
                 }
 
                 _usersListState.value = UsersListState.Success(users)

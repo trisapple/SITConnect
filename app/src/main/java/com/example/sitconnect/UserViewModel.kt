@@ -2,6 +2,8 @@ package com.example.sitconnect
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +21,9 @@ data class UserRoles(
 data class UserData(
     val name: String? = null,
     val email: String? = null,
-    val roles: UserRoles? = null
+    val roles: UserRoles? = null,
+    val contactNumber: String? = null,
+    val isOnboarded: Boolean = true
 )
 
 sealed class UserDataState {
@@ -36,14 +40,25 @@ sealed class UpdateNameState {
     data class Error(val message: String) : UpdateNameState()
 }
 
+sealed class OnboardingState {
+    object Idle : OnboardingState()
+    object Loading : OnboardingState()
+    object Success : OnboardingState()
+    data class Error(val message: String) : OnboardingState()
+}
+
 class UserViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
     private val _userDataState = MutableStateFlow<UserDataState>(UserDataState.Idle)
     val userDataState: StateFlow<UserDataState> = _userDataState
 
     private val _updateNameState = MutableStateFlow<UpdateNameState>(UpdateNameState.Idle)
     val updateNameState: StateFlow<UpdateNameState> = _updateNameState
+
+    private val _onboardingState = MutableStateFlow<OnboardingState>(OnboardingState.Idle)
+    val onboardingState: StateFlow<OnboardingState> = _onboardingState
 
     fun fetchUserData(uid: String) {
         viewModelScope.launch {
@@ -57,6 +72,7 @@ class UserViewModel : ViewModel() {
                     if (document.exists()) {
                         val name = document.getString("name")
                         val email = document.getString("email")
+                        val contactNumber = document.getString("contactNumber")
                         val rolesMap = document.get("roles") as? Map<*, *>
                         val roles = rolesMap?.let {
                             UserRoles(
@@ -65,7 +81,26 @@ class UserViewModel : ViewModel() {
                                 admin = it["admin"] as? Boolean ?: false
                             )
                         }
-                        _userDataState.value = UserDataState.Success(UserData(name = name, email = email, roles = roles))
+                        // If isOnboarded field exists in Firestore, use it.
+                        // If it doesn't exist yet (older accounts), treat as not onboarded
+                        // only for non-admin users whose name is still the default "Test".
+                        val isOnboardedField = document.getBoolean("isOnboarded")
+                        val isAdmin = roles?.admin == true
+                        val isOnboarded = when {
+                            isOnboardedField != null -> isOnboardedField
+                            isAdmin -> true // admins never need onboarding
+                            name.isNullOrBlank() || name == "Test" -> false // not set up yet
+                            else -> true // has a real name, treat as onboarded
+                        }
+                        _userDataState.value = UserDataState.Success(
+                            UserData(
+                                name = name,
+                                email = email,
+                                roles = roles,
+                                contactNumber = contactNumber,
+                                isOnboarded = isOnboarded
+                            )
+                        )
                     } else {
                         _userDataState.value = UserDataState.Error("User data not found")
                     }
@@ -96,6 +131,60 @@ class UserViewModel : ViewModel() {
                 _updateNameState.value = UpdateNameState.Error(e.message ?: "Failed to update name")
             }
         }
+    }
+
+    /**
+     * Completes onboarding for the user:
+     * 1. Re-authenticates with the current (admin-set) password
+     * 2. Updates the Firebase Auth password to the new password
+     * 3. Updates Firestore with name, contactNumber, and isOnboarded = true
+     */
+    fun completeOnboarding(
+        currentPassword: String,
+        newPassword: String,
+        name: String,
+        contactNumber: String
+    ) {
+        viewModelScope.launch {
+            try {
+                _onboardingState.value = OnboardingState.Loading
+
+                val user = auth.currentUser
+                    ?: throw Exception("No authenticated user found")
+                val email = user.email
+                    ?: throw Exception("User email not found")
+
+                withTimeout(15000L) {
+                    // Step 1: Re-authenticate with the admin-set password
+                    val credential = EmailAuthProvider.getCredential(email, currentPassword)
+                    user.reauthenticate(credential).await()
+
+                    // Step 2: Update the password
+                    user.updatePassword(newPassword).await()
+
+                    // Step 3: Update Firestore profile
+                    firestore.collection("users").document(user.uid)
+                        .update(
+                            mapOf(
+                                "name" to name,
+                                "contactNumber" to contactNumber,
+                                "isOnboarded" to true
+                            )
+                        )
+                        .await()
+                }
+
+                _onboardingState.value = OnboardingState.Success
+            } catch (e: TimeoutCancellationException) {
+                _onboardingState.value = OnboardingState.Error("Request timed out. Please check your internet connection.")
+            } catch (e: Exception) {
+                _onboardingState.value = OnboardingState.Error(e.message ?: "Onboarding failed")
+            }
+        }
+    }
+
+    fun resetOnboardingState() {
+        _onboardingState.value = OnboardingState.Idle
     }
 
     fun resetUpdateNameState() {
