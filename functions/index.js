@@ -35,22 +35,32 @@ const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
-exports.sendWelcomeEmail = functions.auth.user().onCreate((user) => {
-  // Your backend logic here, e.g., send a welcome email,
-  // or create a user profile in Firestore
-  const email = user.email; // The email of the new user
-  const uid = user.uid; // The unique user ID
+exports.sendWelcomeEmail = functions.auth.user().onCreate(async (user) => {
+  const email = user.email;
+  const uid = user.uid;
 
-  // Example: Create a user document in Firestore
-  return admin.firestore().collection('users').doc(uid).set({
+  // Only create the Firestore document if it doesn't already exist.
+  // When an admin uses createUser(), that function already writes the document
+  // with the correct roles. Writing again here would overwrite those roles with
+  // hardcoded student:true.
+  const docRef = admin.firestore().collection('users').doc(uid);
+  const docSnap = await docRef.get();
+
+  if (docSnap.exists) {
+    console.log('User document already exists for:', email, '— skipping onCreate write.');
+    return null;
+  }
+
+  // Self-registered user (e.g., via email/password sign-up on the login screen)
+  return docRef.set({
     email: email,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     name: "Test",
     isOnboarded: false,
     roles: {
-        "student": true,
-        "lecturer": false,
-        "admin": false
+      "student": true,
+      "lecturer": false,
+      "admin": false
     },
   }).then(() => {
     console.log('New user document created in Firestore for:', email);
@@ -116,7 +126,7 @@ exports.createUser = functions.https.onCall(async (data, context) => {
     // Create the user document in Firestore
     await admin.firestore().collection('users').doc(userRecord.uid).set({
       email: email,
-      name: 'Test',
+      name: name,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       isOnboarded: false,
       roles: {
