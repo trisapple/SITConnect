@@ -46,7 +46,7 @@ fun MCReviewScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp,0.dp)
     ) {
         Text(
             text = "MC Review",
@@ -192,6 +192,7 @@ private fun MCSubmissionsTab(
                         onReview = { onReview(submission) }
                     )
                 }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
             }
         }
     }
@@ -408,7 +409,6 @@ private fun MCStatisticsTab(statistics: MCStatistics?) {
                         fontWeight = FontWeight.Bold
                     )
                 }
-
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -418,6 +418,7 @@ private fun MCStatisticsTab(statistics: MCStatistics?) {
                         }
                     }
                 }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
             }
         }
     }
