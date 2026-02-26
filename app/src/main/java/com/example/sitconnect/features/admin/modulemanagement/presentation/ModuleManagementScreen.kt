@@ -44,6 +44,7 @@ fun ModuleManagementScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
@@ -58,7 +59,7 @@ fun ModuleManagementScreen(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(16.dp, 0.dp)
         ) {
             Text(
                 text = "Module Management",
@@ -132,6 +133,8 @@ fun ModuleManagementScreen(
                                     onManageSchedule = { showScheduleDialog = module }
                                 )
                             }
+                            // Add space after all items
+                            item { Spacer(modifier = Modifier.height(4.dp)) }
                         }
                     }
                 }
