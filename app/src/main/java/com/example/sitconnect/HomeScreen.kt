@@ -200,7 +200,7 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp,0.dp)
     ) {
         // Welcome Card
         Card(
