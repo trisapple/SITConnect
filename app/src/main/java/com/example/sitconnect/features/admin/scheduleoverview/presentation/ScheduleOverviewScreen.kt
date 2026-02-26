@@ -34,7 +34,7 @@ fun ScheduleOverviewScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp,0.dp)
     ) {
         Text(
             text = "Schedule Overview",
@@ -144,6 +144,7 @@ private fun AllSchedulesTab(
                     items(entries, key = { it.id }) { entry ->
                         ScheduleEntryCard(entry = entry)
                     }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
             }
         }
