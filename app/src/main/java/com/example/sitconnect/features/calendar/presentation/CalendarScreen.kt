@@ -82,6 +82,7 @@ fun CalendarScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         floatingActionButton = {
             if (isAdmin) {
@@ -100,14 +101,6 @@ fun CalendarScreen(
                 .padding(paddingValues)
                 .padding(16.dp, 0.dp)
         ) {
-            Text(
-                text = "Trimester Calendar",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             Text(
                 text = "View exam dates, recess weeks, and holidays",
                 style = MaterialTheme.typography.bodyMedium,
@@ -217,6 +210,8 @@ fun CalendarScreen(
                                     onDelete = { showDeleteDialog = event }
                                 )
                             }
+                            // Add space after all items
+                            item { Spacer(modifier = Modifier.height(4.dp)) }
                         }
                     }
                 }
