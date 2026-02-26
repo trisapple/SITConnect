@@ -40,7 +40,7 @@ fun FacilityManagementScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp,0.dp)
     ) {
         Text(
             text = "Facility Management",
@@ -212,6 +212,7 @@ private fun BookingsTab(
                         onReject = { onReject(booking.id) }
                     )
                 }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
             }
         }
     }
