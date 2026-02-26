@@ -201,12 +201,6 @@ fun UserManagementScreen(
                                     modifier = Modifier.padding(vertical = 8.dp)
                                 ) {
                                     Text(
-                                        text = "User Management",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
                                         text = "Manage user roles and permissions",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -228,6 +222,8 @@ fun UserManagementScreen(
                                     isUpdating = userUpdateState is UserUpdateState.Loading
                                 )
                             }
+                            // Add space after all items
+                            item { Spacer(modifier = Modifier.height(8.dp)) }
                         }
                     }
                     is UsersListState.Error -> {
@@ -240,12 +236,6 @@ fun UserManagementScreen(
                                 Column(
                                     modifier = Modifier.padding(bottom = 16.dp)
                                 ) {
-                                    Text(
-                                        text = "User Management",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Manage user roles and permissions",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -279,12 +269,6 @@ fun UserManagementScreen(
                         ) {
                             item {
                                 Column {
-                                    Text(
-                                        text = "User Management",
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Manage user roles and permissions",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -561,8 +545,6 @@ fun UserManagementCard(
             }
         }
     }
-
-    Spacer(modifier = Modifier.height(16.dp))
 
     if (showDialog) {
         EditRolesDialog(
