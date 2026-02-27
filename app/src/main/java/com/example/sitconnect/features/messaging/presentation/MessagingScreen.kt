@@ -55,6 +55,8 @@ fun MessagingScreen(
     val currentUser = (authState as? AuthState.Success)?.user
     val userDataState by userViewModel.userDataState.collectAsState()
     val isAdmin = (userDataState as? UserDataState.Success)?.userData?.roles?.admin == true
+    val isStudent = (userDataState as? UserDataState.Success)?.userData?.roles?.student == true
+    val userName = (userDataState as? UserDataState.Success)?.userData?.name ?: "User"
     val chatRoomsState by messagingViewModel.chatRoomsState.collectAsState()
     val selectedChatRoom by messagingViewModel.selectedChatRoom.collectAsState()
 
@@ -70,7 +72,7 @@ fun MessagingScreen(
         if (currentUser?.uid != null && userDataState is UserDataState.Success) {
             messagingViewModel.fetchChatRooms(
                 currentUser.uid,
-                currentUser.email ?: "User",
+                userName,
                 isAdmin
             )
         }
@@ -80,8 +82,10 @@ fun MessagingScreen(
         ChatRoomScreen(
             chatRoom = selectedChatRoom!!,
             currentUserId = currentUser?.uid ?: "",
-            currentUserName = currentUser?.email ?: "User",
+            currentUserName = userName,
             messagingViewModel = messagingViewModel,
+            isReadOnly = isStudent && selectedChatRoom!!.type == ChatRoomType.GENERAL,
+            isAdmin = isAdmin,
             onBack = { messagingViewModel.clearSelectedChatRoom() }
         )
     } else {
@@ -282,18 +286,22 @@ fun ChatRoomScreen(
     currentUserId: String,
     currentUserName: String,
     messagingViewModel: MessagingViewModel,
+    isReadOnly: Boolean = false,
+    isAdmin: Boolean = false,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val messagesState by messagingViewModel.chatMessagesState.collectAsState()
     val sendState by messagingViewModel.sendMessageState.collectAsState()
     val membersState by messagingViewModel.membersState.collectAsState()
+    val availableUsersState by messagingViewModel.availableUsersState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFileName by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     var showMembersDialog by remember { mutableStateOf(false) }
     var showMemberProfile by remember { mutableStateOf<ChatRoomMember?>(null) }
+    var showAddMemberDialog by remember { mutableStateOf(false) }
 
     // File/image picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -434,7 +442,7 @@ fun ChatRoomScreen(
         }
 
         // Selected file preview
-        if (selectedFileUri != null) {
+        if (!isReadOnly && selectedFileUri != null) {
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 modifier = Modifier.fillMaxWidth()
@@ -458,69 +466,91 @@ fun ChatRoomScreen(
             }
         }
 
-        // Message Input
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+        if (isReadOnly) {
+            // Read-only notice for students in announcement channels
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                // Attachment button
-                IconButton(
-                    onClick = { filePickerLauncher.launch("*/*") },
-                    enabled = sendState !is SendMessageState.Loading
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Attach file",
-                        tint = MaterialTheme.colorScheme.primary
+                    Text(
+                        text = "📢 This is an announcement channel. Only admins and lecturers can send messages.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
                     )
                 }
+            }
+        } else {
+            // Message Input
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Attachment button
+                    IconButton(
+                        onClick = { filePickerLauncher.launch("*/*") },
+                        enabled = sendState !is SendMessageState.Loading
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Attach file",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
-                OutlinedTextField(
-                    value = messageText,
-                    onValueChange = { messageText = it },
-                    placeholder = { Text("Type a message...") },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(24.dp),
-                    singleLine = false,
-                    maxLines = 3,
-                    enabled = sendState !is SendMessageState.Loading
-                )
+                    OutlinedTextField(
+                        value = messageText,
+                        onValueChange = { messageText = it },
+                        placeholder = { Text("Type a message...") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(24.dp),
+                        singleLine = false,
+                        maxLines = 3,
+                        enabled = sendState !is SendMessageState.Loading
+                    )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
-                IconButton(
-                    onClick = {
-                        if (messageText.isNotBlank() || selectedFileUri != null) {
-                            messagingViewModel.sendMessageWithAttachment(
-                                context = context,
-                                chatRoomId = chatRoom.id,
-                                content = messageText.trim(),
-                                fileUri = selectedFileUri,
-                                fileName = selectedFileName
+                    IconButton(
+                        onClick = {
+                            if (messageText.isNotBlank() || selectedFileUri != null) {
+                                messagingViewModel.sendMessageWithAttachment(
+                                    context = context,
+                                    chatRoomId = chatRoom.id,
+                                    content = messageText.trim(),
+                                    fileUri = selectedFileUri,
+                                    fileName = selectedFileName
+                                )
+                            }
+                        },
+                        enabled = (messageText.isNotBlank() || selectedFileUri != null) && sendState !is SendMessageState.Loading
+                    ) {
+                        if (sendState is SendMessageState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send",
+                                tint = if (messageText.isNotBlank() || selectedFileUri != null)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    },
-                    enabled = (messageText.isNotBlank() || selectedFileUri != null) && sendState !is SendMessageState.Loading
-                ) {
-                    if (sendState is SendMessageState.Loading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "Send",
-                            tint = if (messageText.isNotBlank() || selectedFileUri != null)
-                                MaterialTheme.colorScheme.primary
-                            else
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
@@ -531,11 +561,37 @@ fun ChatRoomScreen(
     if (showMembersDialog) {
         MembersDialog(
             membersState = membersState,
+            isAdmin = isAdmin,
+            isModuleRoom = chatRoom.type == ChatRoomType.MODULE,
             onDismiss = {
                 showMembersDialog = false
                 messagingViewModel.clearMembersState()
             },
-            onMemberClick = { member -> showMemberProfile = member }
+            onMemberClick = { member -> showMemberProfile = member },
+            onRemoveMember = { member ->
+                chatRoom.moduleCode?.let { code ->
+                    messagingViewModel.removeMemberFromModule(code, member.uid)
+                }
+            },
+            onAddMemberClick = {
+                chatRoom.moduleCode?.let { code ->
+                    messagingViewModel.fetchAvailableUsersForModule(code)
+                }
+                showAddMemberDialog = true
+            }
+        )
+    }
+
+    // Add Member Dialog
+    if (showAddMemberDialog && isAdmin && chatRoom.type == ChatRoomType.MODULE) {
+        AddMemberDialog(
+            availableUsersState = availableUsersState,
+            onDismiss = { showAddMemberDialog = false },
+            onAddMember = { userUid ->
+                chatRoom.moduleCode?.let { code ->
+                    messagingViewModel.addMemberToModule(code, userUid)
+                }
+            }
         )
     }
 
@@ -551,12 +607,32 @@ fun ChatRoomScreen(
 @Composable
 fun MembersDialog(
     membersState: MembersState,
+    isAdmin: Boolean = false,
+    isModuleRoom: Boolean = false,
     onDismiss: () -> Unit,
-    onMemberClick: (ChatRoomMember) -> Unit
+    onMemberClick: (ChatRoomMember) -> Unit,
+    onRemoveMember: (ChatRoomMember) -> Unit = {},
+    onAddMemberClick: () -> Unit = {}
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Members") },
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Members")
+                if (isAdmin && isModuleRoom) {
+                    IconButton(onClick = onAddMemberClick) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Member"
+                        )
+                    }
+                }
+            }
+        },
         text = {
             when (membersState) {
                 is MembersState.Loading -> {
@@ -592,7 +668,9 @@ fun MembersDialog(
                                 items(members) { member ->
                                     MemberListItem(
                                         member = member,
-                                        onClick = { onMemberClick(member) }
+                                        onClick = { onMemberClick(member) },
+                                        showRemoveButton = isAdmin && isModuleRoom && member.role != "Lecturer" && member.role != "Admin",
+                                        onRemove = { onRemoveMember(member) }
                                     )
                                 }
                             }
@@ -622,13 +700,17 @@ fun MembersDialog(
 @Composable
 fun MemberListItem(
     member: ChatRoomMember,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    showRemoveButton: Boolean = false,
+    onRemove: () -> Unit = {}
 ) {
     val roleColor = when (member.role) {
         "Admin" -> MaterialTheme.colorScheme.error
         "Lecturer" -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
+
+    var showRemoveConfirm by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -689,8 +771,157 @@ fun MemberListItem(
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            if (showRemoveButton) {
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(
+                    onClick = { showRemoveConfirm = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Text(
+                        text = "✕",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         }
     }
+
+    if (showRemoveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRemoveConfirm = false },
+            title = { Text("Remove Member") },
+            text = { Text("Remove ${member.name} from this module?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRemove()
+                        showRemoveConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemoveConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun AddMemberDialog(
+    availableUsersState: AvailableUsersState,
+    onDismiss: () -> Unit,
+    onAddMember: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Member") },
+        text = {
+            when (availableUsersState) {
+                is AvailableUsersState.Loading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is AvailableUsersState.Success -> {
+                    val users = availableUsersState.users
+                    if (users.isEmpty()) {
+                        Text(
+                            text = "No available users to add",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.heightIn(max = 400.dp)
+                        ) {
+                            items(users) { user ->
+                                val roleColor = when (user.role) {
+                                    "Lecturer" -> MaterialTheme.colorScheme.tertiary
+                                    else -> MaterialTheme.colorScheme.primary
+                                }
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(roleColor.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = user.name.firstOrNull()?.uppercase() ?: "?",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = roleColor,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = user.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "${user.email} • ${user.role}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { onAddMember(user.uid) },
+                                            modifier = Modifier.height(32.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                        ) {
+                                            Text("Add", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                is AvailableUsersState.Error -> {
+                    Text(
+                        text = "Error: ${availableUsersState.message}",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                is AvailableUsersState.Idle -> {}
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @Composable

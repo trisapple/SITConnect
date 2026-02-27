@@ -178,6 +178,13 @@ fun HomeScreen(
             description = "Review MC submissions",
             route = Screen.MCReview.route,
             color = Color(0xFF4CAF50)
+        ),
+        FeatureItem(
+            title = "Messaging",
+            emoji = "💬",
+            description = "View & manage all chat rooms",
+            route = Screen.Messaging.route,
+            color = Color(0xFF795548)
         )
     )
 
@@ -220,7 +227,7 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = user?.email ?: roleText,
+                    text = userData?.name ?: user?.email ?: roleText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                 )

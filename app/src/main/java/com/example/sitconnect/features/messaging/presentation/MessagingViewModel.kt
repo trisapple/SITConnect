@@ -8,6 +8,7 @@ import com.example.sitconnect.features.messaging.domain.model.*
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -51,6 +52,13 @@ sealed class MembersState {
     data class Error(val message: String) : MembersState()
 }
 
+sealed class AvailableUsersState {
+    object Idle : AvailableUsersState()
+    object Loading : AvailableUsersState()
+    data class Success(val users: List<ChatRoomMember>) : AvailableUsersState()
+    data class Error(val message: String) : AvailableUsersState()
+}
+
 class MessagingViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage = FirebaseStorage.getInstance()
@@ -70,12 +78,17 @@ class MessagingViewModel : ViewModel() {
     private val _membersState = MutableStateFlow<MembersState>(MembersState.Idle)
     val membersState: StateFlow<MembersState> = _membersState
 
+    private val _availableUsersState = MutableStateFlow<AvailableUsersState>(AvailableUsersState.Idle)
+    val availableUsersState: StateFlow<AvailableUsersState> = _availableUsersState
+
     private var currentUserId: String = ""
     private var currentUserName: String = ""
+    private var isAdminUser: Boolean = false
 
     fun fetchChatRooms(userId: String, userName: String, isAdmin: Boolean = false) {
         currentUserId = userId
         currentUserName = userName
+        isAdminUser = isAdmin
         viewModelScope.launch {
             try {
                 _chatRoomsState.value = ChatRoomsState.Loading
@@ -229,10 +242,12 @@ class MessagingViewModel : ViewModel() {
 
                                     if (userDoc.exists()) {
                                         val rolesMap = userDoc.get("roles") as? Map<*, *>
-                                        val isAdmin = rolesMap?.get("admin") == true
-                                        if (isAdmin) continue
+                                        val userIsAdmin = rolesMap?.get("admin") == true
+                                        // Hide admin users from non-admin viewers
+                                        if (userIsAdmin && !isAdminUser) continue
 
                                         val role = when {
+                                            userIsAdmin -> "Admin"
                                             rolesMap?.get("lecturer") == true -> "Lecturer"
                                             rolesMap?.get("student") == true -> "Student"
                                             else -> "User"
@@ -252,15 +267,17 @@ class MessagingViewModel : ViewModel() {
                             }
                         }
                     } else {
-                        // For GENERAL, STUDY_GROUP, CLUB rooms: show all non-admin users
+                        // For GENERAL, STUDY_GROUP, CLUB rooms: show all non-admin users (admins visible only to admins)
                         val usersSnapshot = firestore.collection("users").get().await()
 
                         for (doc in usersSnapshot.documents) {
                             val rolesMap = doc.get("roles") as? Map<*, *>
-                            val isAdmin = rolesMap?.get("admin") == true
-                            if (isAdmin) continue
+                            val userIsAdmin = rolesMap?.get("admin") == true
+                            // Hide admin users from non-admin viewers
+                            if (userIsAdmin && !isAdminUser) continue
 
                             val role = when {
+                                userIsAdmin -> "Admin"
                                 rolesMap?.get("lecturer") == true -> "Lecturer"
                                 rolesMap?.get("student") == true -> "Student"
                                 else -> "User"
@@ -281,7 +298,8 @@ class MessagingViewModel : ViewModel() {
                             when (it.role) {
                                 "Lecturer" -> 0
                                 "Student" -> 1
-                                else -> 2
+                                "Admin" -> 2
+                                else -> 3
                             }
                         }.thenBy { it.name.lowercase() })
                     )
@@ -296,6 +314,156 @@ class MessagingViewModel : ViewModel() {
 
     fun clearMembersState() {
         _membersState.value = MembersState.Idle
+        _availableUsersState.value = AvailableUsersState.Idle
+    }
+
+    fun fetchAvailableUsersForModule(moduleCode: String) {
+        viewModelScope.launch {
+            try {
+                _availableUsersState.value = AvailableUsersState.Loading
+
+                withTimeout(15000L) {
+                    // Get the module to find current members
+                    val moduleSnapshot = firestore.collection("modules")
+                        .whereEqualTo("code", moduleCode)
+                        .get()
+                        .await()
+
+                    val moduleDoc = moduleSnapshot.documents.firstOrNull()
+                    val enrolledStudents = if (moduleDoc != null) {
+                        (moduleDoc.get("enrolledStudents") as? List<*>)
+                            ?.mapNotNull { it as? String }?.toSet() ?: emptySet()
+                    } else {
+                        emptySet()
+                    }
+                    val lecturerId = moduleDoc?.getString("lecturerId")
+
+                    // Get all users who are NOT in this module
+                    val usersSnapshot = firestore.collection("users").get().await()
+                    val available = mutableListOf<ChatRoomMember>()
+
+                    for (doc in usersSnapshot.documents) {
+                        val uid = doc.id
+                        if (uid in enrolledStudents || uid == lecturerId) continue
+
+                        val rolesMap = doc.get("roles") as? Map<*, *>
+                        val userIsAdmin = rolesMap?.get("admin") == true
+                        if (userIsAdmin) continue // Don't show admin in the add list
+
+                        val role = when {
+                            rolesMap?.get("lecturer") == true -> "Lecturer"
+                            rolesMap?.get("student") == true -> "Student"
+                            else -> "User"
+                        }
+                        available.add(
+                            ChatRoomMember(
+                                uid = uid,
+                                name = doc.getString("name") ?: "",
+                                email = doc.getString("email") ?: "",
+                                role = role
+                            )
+                        )
+                    }
+
+                    _availableUsersState.value = AvailableUsersState.Success(
+                        available.sortedBy { it.name.lowercase() }
+                    )
+                }
+            } catch (e: Exception) {
+                _availableUsersState.value = AvailableUsersState.Error(e.message ?: "Failed to fetch available users")
+            }
+        }
+    }
+
+    fun addMemberToModule(moduleCode: String, userUid: String) {
+        viewModelScope.launch {
+            try {
+                // Find the module document by code
+                val moduleSnapshot = firestore.collection("modules")
+                    .whereEqualTo("code", moduleCode)
+                    .get()
+                    .await()
+
+                val moduleDoc = moduleSnapshot.documents.firstOrNull() ?: return@launch
+                val moduleId = moduleDoc.id
+
+                // Add to module's enrolledStudents
+                firestore.collection("modules")
+                    .document(moduleId)
+                    .update("enrolledStudents", FieldValue.arrayUnion(userUid))
+                    .await()
+
+                // Also update all schedules for this module
+                val schedulesSnapshot = firestore.collection("schedules")
+                    .whereEqualTo("moduleId", moduleId)
+                    .get()
+                    .await()
+
+                for (scheduleDoc in schedulesSnapshot.documents) {
+                    firestore.collection("schedules")
+                        .document(scheduleDoc.id)
+                        .update("enrolledStudents", FieldValue.arrayUnion(userUid))
+                        .await()
+                }
+
+                // Refresh members and available users
+                val currentRoom = _selectedChatRoom.value
+                if (currentRoom != null) {
+                    fetchChatRoomMembers(currentRoom)
+                    fetchAvailableUsersForModule(moduleCode)
+                }
+
+                // Refresh chat rooms
+                fetchChatRooms(currentUserId, currentUserName, isAdminUser)
+            } catch (e: Exception) {
+                // Handle error silently
+            }
+        }
+    }
+
+    fun removeMemberFromModule(moduleCode: String, userUid: String) {
+        viewModelScope.launch {
+            try {
+                // Find the module document by code
+                val moduleSnapshot = firestore.collection("modules")
+                    .whereEqualTo("code", moduleCode)
+                    .get()
+                    .await()
+
+                val moduleDoc = moduleSnapshot.documents.firstOrNull() ?: return@launch
+                val moduleId = moduleDoc.id
+
+                // Remove from module's enrolledStudents
+                firestore.collection("modules")
+                    .document(moduleId)
+                    .update("enrolledStudents", FieldValue.arrayRemove(userUid))
+                    .await()
+
+                // Also update all schedules for this module
+                val schedulesSnapshot = firestore.collection("schedules")
+                    .whereEqualTo("moduleId", moduleId)
+                    .get()
+                    .await()
+
+                for (scheduleDoc in schedulesSnapshot.documents) {
+                    firestore.collection("schedules")
+                        .document(scheduleDoc.id)
+                        .update("enrolledStudents", FieldValue.arrayRemove(userUid))
+                        .await()
+                }
+
+                // Refresh members
+                val currentRoom = _selectedChatRoom.value
+                if (currentRoom != null) {
+                    fetchChatRoomMembers(currentRoom)
+                }
+
+                // Refresh chat rooms
+                fetchChatRooms(currentUserId, currentUserName, isAdminUser)
+            } catch (e: Exception) {
+                // Handle error silently
+            }
+        }
     }
 
     fun fetchMessages(chatRoomId: String) {

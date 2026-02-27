@@ -424,6 +424,20 @@ fun SITConnectNavigation(
                                 modifier = Modifier.padding(horizontal = 12.dp),
                                 shape = RoundedCornerShape(4.dp)
                             )
+
+                            NavigationDrawerItem(
+                                icon = { Icon(Icons.Default.Email, contentDescription = "Messaging") },
+                                label = { Text("Messaging") },
+                                selected = currentRoute == Screen.Messaging.route,
+                                onClick = {
+                                    scope.launch {
+                                        drawerState.close()
+                                        navController.navigate(Screen.Messaging.route)
+                                    }
+                                },
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                shape = RoundedCornerShape(4.dp)
+                            )
                         }
                     }
 
