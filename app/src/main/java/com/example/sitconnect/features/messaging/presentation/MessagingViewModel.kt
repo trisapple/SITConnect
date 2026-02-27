@@ -37,6 +37,20 @@ sealed class SendMessageState {
     data class Error(val message: String) : SendMessageState()
 }
 
+data class ChatRoomMember(
+    val uid: String = "",
+    val name: String = "",
+    val email: String = "",
+    val role: String = ""
+)
+
+sealed class MembersState {
+    object Idle : MembersState()
+    object Loading : MembersState()
+    data class Success(val members: List<ChatRoomMember>) : MembersState()
+    data class Error(val message: String) : MembersState()
+}
+
 class MessagingViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage = FirebaseStorage.getInstance()
@@ -53,52 +67,93 @@ class MessagingViewModel : ViewModel() {
     private val _selectedChatRoom = MutableStateFlow<ChatRoom?>(null)
     val selectedChatRoom: StateFlow<ChatRoom?> = _selectedChatRoom
 
+    private val _membersState = MutableStateFlow<MembersState>(MembersState.Idle)
+    val membersState: StateFlow<MembersState> = _membersState
+
     private var currentUserId: String = ""
     private var currentUserName: String = ""
 
-    fun fetchChatRooms(userId: String, userName: String) {
+    fun fetchChatRooms(userId: String, userName: String, isAdmin: Boolean = false) {
         currentUserId = userId
         currentUserName = userName
         viewModelScope.launch {
             try {
                 _chatRoomsState.value = ChatRoomsState.Loading
 
-                withTimeout(15000L) { // 15 second timeout
-                    val chatRoomsSnapshot = firestore.collection("chat_rooms")
-                        .get()
-                        .await()
+                withTimeout(15000L) {
+                    val chatRooms = mutableListOf<ChatRoom>()
 
-                    val chatRooms = chatRoomsSnapshot.documents.mapNotNull { document ->
+                    // 1) MODULE chat rooms — generated directly from modules collection
+                    val allModulesSnapshot = firestore.collection("modules").get().await()
+
+                    for (moduleDoc in allModulesSnapshot.documents) {
+                        val code = moduleDoc.getString("code") ?: continue
+                        val name = moduleDoc.getString("name") ?: ""
+                        val enrolledStudents = (moduleDoc.get("enrolledStudents") as? List<*>)
+                            ?.mapNotNull { it as? String } ?: emptyList()
+                        val lecturerId = moduleDoc.getString("lecturerId")
+
+                        // Filter: non-admin users only see modules they belong to
+                        if (!isAdmin) {
+                            val userInModule = userId in enrolledStudents || userId == lecturerId
+                            if (!userInModule) continue
+                        }
+
+                        val chatRoomId = "module_$code"
+                        val memberCount = enrolledStudents.size + (if (lecturerId != null) 1 else 0)
+
+                        // Try to get last message from the chat room document
+                        var lastMessage: String? = null
+                        var lastMessageTime: Date? = null
                         try {
-                            // Get member count from messages - count unique senders
-                            val messagesSnapshot = firestore.collection("chat_rooms")
-                                .document(document.id)
-                                .collection("messages")
+                            val chatRoomDoc = firestore.collection("chat_rooms")
+                                .document(chatRoomId)
                                 .get()
                                 .await()
+                            if (chatRoomDoc.exists()) {
+                                lastMessage = chatRoomDoc.getString("lastMessage")
+                                lastMessageTime = chatRoomDoc.getTimestamp("lastMessageTime")?.toDate()
+                            }
+                        } catch (e: Exception) {
+                            // Ignore — chat room doc may not exist yet
+                        }
 
-                            val uniqueSenders = messagesSnapshot.documents
-                                .mapNotNull { it.getString("senderId") }
-                                .toSet()
-                                .size
-
-                            // Use at least 1 if there's a stored memberCount, or the unique senders count
-                            val storedMemberCount = document.getLong("memberCount")?.toInt() ?: 0
-                            val actualMemberCount = maxOf(storedMemberCount, uniqueSenders)
-
+                        chatRooms.add(
                             ChatRoom(
-                                id = document.id,
-                                name = document.getString("name") ?: "",
-                                description = document.getString("description") ?: "",
-                                type = ChatRoomType.valueOf(document.getString("type") ?: "GENERAL"),
-                                moduleCode = document.getString("moduleCode"),
-                                memberCount = actualMemberCount,
-                                lastMessage = document.getString("lastMessage"),
-                                lastMessageTime = document.getTimestamp("lastMessageTime")?.toDate(),
-                                imageUrl = document.getString("imageUrl") ?: ""
+                                id = chatRoomId,
+                                name = "$code $name",
+                                description = moduleDoc.getString("description") ?: "",
+                                type = ChatRoomType.MODULE,
+                                moduleCode = code,
+                                memberCount = memberCount,
+                                lastMessage = lastMessage,
+                                lastMessageTime = lastMessageTime
+                            )
+                        )
+                    }
+
+                    // 2) Non-MODULE chat rooms — from chat_rooms collection (GENERAL, STUDY_GROUP, CLUB)
+                    val chatRoomsSnapshot = firestore.collection("chat_rooms").get().await()
+                    for (document in chatRoomsSnapshot.documents) {
+                        try {
+                            val type = ChatRoomType.valueOf(document.getString("type") ?: "GENERAL")
+                            if (type == ChatRoomType.MODULE) continue // Skip — already handled above
+
+                            chatRooms.add(
+                                ChatRoom(
+                                    id = document.id,
+                                    name = document.getString("name") ?: "",
+                                    description = document.getString("description") ?: "",
+                                    type = type,
+                                    moduleCode = null,
+                                    memberCount = document.getLong("memberCount")?.toInt() ?: 0,
+                                    lastMessage = document.getString("lastMessage"),
+                                    lastMessageTime = document.getTimestamp("lastMessageTime")?.toDate(),
+                                    imageUrl = document.getString("imageUrl") ?: ""
+                                )
                             )
                         } catch (e: Exception) {
-                            null
+                            // Skip malformed documents
                         }
                     }
 
@@ -114,12 +169,133 @@ class MessagingViewModel : ViewModel() {
 
     fun selectChatRoom(chatRoom: ChatRoom) {
         _selectedChatRoom.value = chatRoom
+        // Ensure the chat_rooms document exists in Firestore so messages can be stored
+        viewModelScope.launch {
+            try {
+                val docRef = firestore.collection("chat_rooms").document(chatRoom.id)
+                val doc = docRef.get().await()
+                if (!doc.exists()) {
+                    docRef.set(
+                        hashMapOf(
+                            "name" to chatRoom.name,
+                            "description" to chatRoom.description,
+                            "type" to chatRoom.type.name,
+                            "moduleCode" to chatRoom.moduleCode,
+                            "memberCount" to chatRoom.memberCount
+                        )
+                    ).await()
+                }
+            } catch (e: Exception) {
+                // Ignore — messages will still work if doc creation fails
+            }
+        }
         fetchMessages(chatRoom.id)
     }
 
     fun clearSelectedChatRoom() {
         _selectedChatRoom.value = null
         _chatMessagesState.value = ChatMessagesState.Idle
+    }
+
+    fun fetchChatRoomMembers(chatRoom: ChatRoom) {
+        viewModelScope.launch {
+            try {
+                _membersState.value = MembersState.Loading
+
+                withTimeout(15000L) {
+                    val members = mutableListOf<ChatRoomMember>()
+
+                    if (chatRoom.type == ChatRoomType.MODULE && chatRoom.moduleCode != null) {
+                        // For MODULE rooms: get enrolled students + lecturer directly from the module
+                        val moduleSnapshot = firestore.collection("modules")
+                            .whereEqualTo("code", chatRoom.moduleCode)
+                            .get()
+                            .await()
+
+                        val moduleDoc = moduleSnapshot.documents.firstOrNull()
+                        if (moduleDoc != null) {
+                            val enrolledStudents = (moduleDoc.get("enrolledStudents") as? List<*>)
+                                ?.mapNotNull { it as? String } ?: emptyList()
+                            val lecturerId = moduleDoc.getString("lecturerId")
+                            val memberUids = enrolledStudents.toMutableSet()
+                            if (lecturerId != null) memberUids.add(lecturerId)
+
+                            for (uid in memberUids) {
+                                try {
+                                    val userDoc = firestore.collection("users")
+                                        .document(uid)
+                                        .get()
+                                        .await()
+
+                                    if (userDoc.exists()) {
+                                        val rolesMap = userDoc.get("roles") as? Map<*, *>
+                                        val isAdmin = rolesMap?.get("admin") == true
+                                        if (isAdmin) continue
+
+                                        val role = when {
+                                            rolesMap?.get("lecturer") == true -> "Lecturer"
+                                            rolesMap?.get("student") == true -> "Student"
+                                            else -> "User"
+                                        }
+                                        members.add(
+                                            ChatRoomMember(
+                                                uid = uid,
+                                                name = userDoc.getString("name") ?: "",
+                                                email = userDoc.getString("email") ?: "",
+                                                role = role
+                                            )
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    // Skip this member if fetch fails
+                                }
+                            }
+                        }
+                    } else {
+                        // For GENERAL, STUDY_GROUP, CLUB rooms: show all non-admin users
+                        val usersSnapshot = firestore.collection("users").get().await()
+
+                        for (doc in usersSnapshot.documents) {
+                            val rolesMap = doc.get("roles") as? Map<*, *>
+                            val isAdmin = rolesMap?.get("admin") == true
+                            if (isAdmin) continue
+
+                            val role = when {
+                                rolesMap?.get("lecturer") == true -> "Lecturer"
+                                rolesMap?.get("student") == true -> "Student"
+                                else -> "User"
+                            }
+                            members.add(
+                                ChatRoomMember(
+                                    uid = doc.id,
+                                    name = doc.getString("name") ?: "",
+                                    email = doc.getString("email") ?: "",
+                                    role = role
+                                )
+                            )
+                        }
+                    }
+
+                    _membersState.value = MembersState.Success(
+                        members.sortedWith(compareBy<ChatRoomMember> {
+                            when (it.role) {
+                                "Lecturer" -> 0
+                                "Student" -> 1
+                                else -> 2
+                            }
+                        }.thenBy { it.name.lowercase() })
+                    )
+                }
+            } catch (e: TimeoutCancellationException) {
+                _membersState.value = MembersState.Error("Request timed out. Please check your internet connection.")
+            } catch (e: Exception) {
+                _membersState.value = MembersState.Error(e.message ?: "Failed to fetch members")
+            }
+        }
+    }
+
+    fun clearMembersState() {
+        _membersState.value = MembersState.Idle
     }
 
     fun fetchMessages(chatRoomId: String) {

@@ -583,7 +583,10 @@ fun SITConnectNavigation(
                     }
 
                     composable(Screen.Messaging.route) {
-                        MessagingScreen(authViewModel = viewModel)
+                        MessagingScreen(
+                            authViewModel = viewModel,
+                            userViewModel = userViewModel
+                        )
                     }
 
                     // Lecturer routes
@@ -691,7 +694,10 @@ fun SITConnectNavigation(
             }
 
             composable(Screen.Messaging.route) {
-                MessagingScreen(authViewModel = viewModel)
+                MessagingScreen(
+                    authViewModel = viewModel,
+                    userViewModel = userViewModel
+                )
             }
 
             // Lecturer routes

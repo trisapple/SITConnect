@@ -17,6 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,12 +28,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.sitconnect.AuthState
 import com.example.sitconnect.AuthViewModel
+import com.example.sitconnect.UserDataState
+import com.example.sitconnect.UserViewModel
 import com.example.sitconnect.features.messaging.domain.model.ChatMessage
 import com.example.sitconnect.features.messaging.domain.model.ChatRoom
 import com.example.sitconnect.features.messaging.domain.model.ChatRoomType
@@ -43,16 +48,31 @@ import java.util.*
 fun MessagingScreen(
     modifier: Modifier = Modifier,
     authViewModel: AuthViewModel = viewModel(),
+    userViewModel: UserViewModel = viewModel(),
     messagingViewModel: MessagingViewModel = viewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
     val currentUser = (authState as? AuthState.Success)?.user
+    val userDataState by userViewModel.userDataState.collectAsState()
+    val isAdmin = (userDataState as? UserDataState.Success)?.userData?.roles?.admin == true
     val chatRoomsState by messagingViewModel.chatRoomsState.collectAsState()
     val selectedChatRoom by messagingViewModel.selectedChatRoom.collectAsState()
 
+    // Fetch user data to determine role
     LaunchedEffect(currentUser?.uid) {
         currentUser?.uid?.let { uid ->
-            messagingViewModel.fetchChatRooms(uid, currentUser.email ?: "User")
+            userViewModel.fetchUserData(uid)
+        }
+    }
+
+    // Fetch chat rooms once role is known
+    LaunchedEffect(currentUser?.uid, userDataState) {
+        if (currentUser?.uid != null && userDataState is UserDataState.Success) {
+            messagingViewModel.fetchChatRooms(
+                currentUser.uid,
+                currentUser.email ?: "User",
+                isAdmin
+            )
         }
     }
 
@@ -267,10 +287,13 @@ fun ChatRoomScreen(
     val context = LocalContext.current
     val messagesState by messagingViewModel.chatMessagesState.collectAsState()
     val sendState by messagingViewModel.sendMessageState.collectAsState()
+    val membersState by messagingViewModel.membersState.collectAsState()
     var messageText by remember { mutableStateOf("") }
     var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFileName by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    var showMembersDialog by remember { mutableStateOf(false) }
+    var showMemberProfile by remember { mutableStateOf<ChatRoomMember?>(null) }
 
     // File/image picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -337,6 +360,17 @@ fun ChatRoomScreen(
                         text = chatRoom.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Members button
+                IconButton(onClick = {
+                    messagingViewModel.fetchChatRoomMembers(chatRoom)
+                    showMembersDialog = true
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "View Members"
                     )
                 }
             }
@@ -492,6 +526,279 @@ fun ChatRoomScreen(
             }
         }
     }
+
+    // Members Dialog
+    if (showMembersDialog) {
+        MembersDialog(
+            membersState = membersState,
+            onDismiss = {
+                showMembersDialog = false
+                messagingViewModel.clearMembersState()
+            },
+            onMemberClick = { member -> showMemberProfile = member }
+        )
+    }
+
+    // Member Profile Dialog
+    showMemberProfile?.let { member ->
+        MemberProfileDialog(
+            member = member,
+            onDismiss = { showMemberProfile = null }
+        )
+    }
+}
+
+@Composable
+fun MembersDialog(
+    membersState: MembersState,
+    onDismiss: () -> Unit,
+    onMemberClick: (ChatRoomMember) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Members") },
+        text = {
+            when (membersState) {
+                is MembersState.Loading -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is MembersState.Success -> {
+                    val members = membersState.members
+                    if (members.isEmpty()) {
+                        Text(
+                            text = "No members found",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Column {
+                            Text(
+                                text = "${members.size} member${if (members.size != 1) "s" else ""}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.heightIn(max = 400.dp)
+                            ) {
+                                items(members) { member ->
+                                    MemberListItem(
+                                        member = member,
+                                        onClick = { onMemberClick(member) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                is MembersState.Error -> {
+                    Text(
+                        text = "Error: ${membersState.message}",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                is MembersState.Idle -> {
+                    // Initial state
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+fun MemberListItem(
+    member: ChatRoomMember,
+    onClick: () -> Unit
+) {
+    val roleColor = when (member.role) {
+        "Admin" -> MaterialTheme.colorScheme.error
+        "Lecturer" -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Avatar initial
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(roleColor.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = member.name.firstOrNull()?.uppercase() ?: "?",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = roleColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = member.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = member.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Surface(
+                color = roleColor.copy(alpha = 0.15f),
+                shape = MaterialTheme.shapes.small
+            ) {
+                Text(
+                    text = member.role,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = roleColor,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MemberProfileDialog(
+    member: ChatRoomMember,
+    onDismiss: () -> Unit
+) {
+    val roleColor = when (member.role) {
+        "Admin" -> MaterialTheme.colorScheme.error
+        "Lecturer" -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = null,
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Avatar
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(roleColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = member.name.firstOrNull()?.uppercase() ?: "?",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = roleColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Name
+                Text(
+                    text = member.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Role badge
+                Surface(
+                    color = roleColor.copy(alpha = 0.15f),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text(
+                        text = member.role,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = roleColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Email card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Email",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = member.email,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

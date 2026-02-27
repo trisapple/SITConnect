@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -208,6 +209,14 @@ fun ProfileScreen(
                                 icon = Icons.Default.Email,
                                 label = "Email",
                                 value = user?.email ?: "Not available"
+                            )
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                            ProfileInfoRow(
+                                icon = Icons.Default.Phone,
+                                label = "Contact Number",
+                                value = userData.contactNumber?.ifBlank { "Not set" } ?: "Not set"
                             )
 
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
