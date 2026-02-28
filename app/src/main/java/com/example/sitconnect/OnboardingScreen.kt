@@ -26,6 +26,45 @@ import androidx.lifecycle.viewmodel.compose.viewModel
  * On completion the user is logged out so they must sign in with their new password
  * and will then be routed to their normal home screen.
  */
+
+data class PasswordValidationResult(
+    val isValid: Boolean,
+    val errors: List<String>
+)
+
+fun validatePassword(password: String): PasswordValidationResult {
+    val errors = mutableListOf<String>()
+
+    if (password.length < 8) {
+        errors.add("Password must be at least 8 characters")
+    }
+
+    if (password.length > 128) {
+        errors.add("Password must not exceed 128 characters")
+    }
+
+    if (!password.any { it.isUpperCase() }) {
+        errors.add("Password must contain at least one uppercase letter")
+    }
+
+    if (!password.any { it.isLowerCase() }) {
+        errors.add("Password must contain at least one lowercase letter")
+    }
+
+    if (!password.any { it.isDigit() }) {
+        errors.add("Password must contain at least one digit")
+    }
+
+    if (!password.any { !it.isLetterOrDigit() }) {
+        errors.add("Password must contain at least one special character (!@#$%^&*)")
+    }
+
+    return PasswordValidationResult(
+        isValid = errors.isEmpty(),
+        errors = errors
+    )
+}
+
 @Composable
 fun OnboardingScreen(
     modifier: Modifier = Modifier,
@@ -186,18 +225,25 @@ fun OnboardingScreen(
                             currentPasswordError = "Please enter your current password"
                             valid = false
                         }
-                        if (newPassword.length < 8) {
-                            newPasswordError = "Password must be at least 8 characters"
+
+                        val pwResult = validatePassword(newPassword)
+
+                        if (pwResult.errors.isNotEmpty()) {
+                            newPasswordError = pwResult.errors.joinToString("\n")
                             valid = false
                         }
+                        else if (newPassword == currentPassword) {
+                            newPasswordError = "New password must be different from the current one"
+                            valid = false
+                        } else {
+                            newPasswordError = null
+                        }
+
                         if (newPassword != confirmPassword) {
                             confirmPasswordError = "Passwords do not match"
                             valid = false
                         }
-                        if (newPassword == currentPassword) {
-                            newPasswordError = "New password must be different from the current one"
-                            valid = false
-                        }
+
                         if (valid) {
                             capturedCurrentPassword = currentPassword
                             capturedNewPassword = newPassword
