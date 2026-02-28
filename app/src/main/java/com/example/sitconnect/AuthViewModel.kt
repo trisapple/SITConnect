@@ -18,11 +18,21 @@ sealed class AuthState {
     data class Error(val message: String) : AuthState()
 }
 
+sealed class EmailActionState {
+    object Idle : EmailActionState()
+    object Loading : EmailActionState()
+    data class Success(val message: String) : EmailActionState()
+    data class Error(val message: String) : EmailActionState()
+}
+
 class AuthViewModel : ViewModel() {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
+
+    private val _emailActionState = MutableStateFlow<EmailActionState>(EmailActionState.Idle)
+    val emailActionState: StateFlow<EmailActionState> = _emailActionState
 
     init {
         // Check if user is already logged in
@@ -66,6 +76,42 @@ class AuthViewModel : ViewModel() {
                 _authState.value = AuthState.Error(e.message ?: "Sign up failed")
             }
         }
+    }
+
+    fun sendPasswordResetEmail(email: String) {
+        viewModelScope.launch {
+            try {
+                _emailActionState.value = EmailActionState.Loading
+                withTimeout(15000L) {
+                    auth.sendPasswordResetEmail(email).await()
+                    _emailActionState.value = EmailActionState.Success("Password reset email sent to $email")
+                }
+            } catch (e: TimeoutCancellationException) {
+                _emailActionState.value = EmailActionState.Error("Request timed out. Please check your internet connection.")
+            } catch (e: Exception) {
+                _emailActionState.value = EmailActionState.Error(e.message ?: "Failed to send password reset email")
+            }
+        }
+    }
+
+    fun sendVerificationEmail() {
+        viewModelScope.launch {
+            try {
+                _emailActionState.value = EmailActionState.Loading
+                withTimeout(15000L) {
+                    auth.currentUser?.sendEmailVerification()?.await()
+                    _emailActionState.value = EmailActionState.Success("Verification email sent. Please check your inbox.")
+                }
+            } catch (e: TimeoutCancellationException) {
+                _emailActionState.value = EmailActionState.Error("Request timed out. Please check your internet connection.")
+            } catch (e: Exception) {
+                _emailActionState.value = EmailActionState.Error(e.message ?: "Failed to send verification email")
+            }
+        }
+    }
+
+    fun resetEmailActionState() {
+        _emailActionState.value = EmailActionState.Idle
     }
 
     fun logout() {

@@ -19,11 +19,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,8 +69,10 @@ fun ProfileScreen(
     val user = (authState as? AuthState.Success)?.user
     val userDataState by userViewModel.userDataState.collectAsState()
     val updateNameState by userViewModel.updateNameState.collectAsState()
+    val emailActionState by viewModel.emailActionState.collectAsState()
 
     var showEditNameDialog by remember { mutableStateOf(false) }
+    var showVerifyEmailPrompt by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Fetch user data when user is available
@@ -93,6 +97,21 @@ fun ProfileScreen(
                     "Error: ${(updateNameState as UpdateNameState.Error).message}"
                 )
                 userViewModel.resetUpdateNameState()
+            }
+            else -> {}
+        }
+    }
+
+    // Handle email action (password reset / verification) feedback
+    LaunchedEffect(emailActionState) {
+        when (emailActionState) {
+            is EmailActionState.Success -> {
+                snackbarHostState.showSnackbar((emailActionState as EmailActionState.Success).message)
+                viewModel.resetEmailActionState()
+            }
+            is EmailActionState.Error -> {
+                snackbarHostState.showSnackbar("Error: ${(emailActionState as EmailActionState.Error).message}")
+                viewModel.resetEmailActionState()
             }
             else -> {}
         }
@@ -264,6 +283,35 @@ fun ProfileScreen(
                                     )
                                 }
                             }
+
+                            // Show "Verify Email" button only when email is not verified
+                            if (user?.isEmailVerified == false) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = { viewModel.sendVerificationEmail() },
+                                    enabled = emailActionState !is EmailActionState.Loading,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    if (emailActionState is EmailActionState.Loading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Email,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                    }
+                                    Text("Send Verification Email")
+                                }
+                            }
                         }
                     }
 
@@ -279,6 +327,96 @@ fun ProfileScreen(
                                 }
                             }
                         )
+                    }
+
+                    // Email verification required prompt
+                    if (showVerifyEmailPrompt) {
+                        AlertDialog(
+                            onDismissRequest = { showVerifyEmailPrompt = false },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Email,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            title = { Text("Email Verification Required") },
+                            text = {
+                                Text(
+                                    "You must verify your email address before resetting your password.\n\nGo to Account Information above and tap \"Send Verification Email\" to verify your email first."
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showVerifyEmailPrompt = false
+                                        viewModel.sendVerificationEmail()
+                                    },
+                                    enabled = emailActionState !is EmailActionState.Loading
+                                ) {
+                                    Text("Send Verification Email")
+                                }
+                            },
+                            dismissButton = {
+                                OutlinedButton(onClick = { showVerifyEmailPrompt = false }) {
+                                    Text("Cancel")
+                                }
+                            }
+                        )
+                    }
+
+                    // Reset Password card — students and lecturers only
+                    val isStudentOrLecturer = userData.roles?.student == true || userData.roles?.lecturer == true
+                    if (isStudentOrLecturer) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Text(
+                                    text = "Security",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = {
+                                        if (user?.isEmailVerified == true) {
+                                            user.email?.let { email ->
+                                                viewModel.sendPasswordResetEmail(email)
+                                            }
+                                        } else {
+                                            showVerifyEmailPrompt = true
+                                        }
+                                    },
+                                    enabled = emailActionState !is EmailActionState.Loading,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (emailActionState is EmailActionState.Loading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                    }
+                                    Text("Send Password Reset Email")
+                                }
+                            }
+                        }
                     }
                 }
                 is UserDataState.Error -> {
