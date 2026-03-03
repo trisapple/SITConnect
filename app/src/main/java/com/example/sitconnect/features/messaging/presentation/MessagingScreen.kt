@@ -535,7 +535,8 @@ fun ChatRoomScreen(
                         MessageBubble(
                             message = message,
                             isCurrentUser = isOwner,
-                            onDelete = if (isOwner) {
+                            isAdmin = isAdmin,
+                            onDelete = if (isOwner || isAdmin) {
                                 { messagingViewModel.deleteMessage(chatRoom.id, message.id) }
                             } else null,
                             onEdit = if (isOwner && message.content.isNotEmpty() && !message.content.startsWith("📎")) {
@@ -1159,6 +1160,7 @@ fun MemberProfileDialog(
 fun MessageBubble(
     message: ChatMessage,
     isCurrentUser: Boolean,
+    isAdmin: Boolean = false,
     onDelete: (() -> Unit)? = null,
     onEdit: ((String) -> Unit)? = null
 ) {
@@ -1192,7 +1194,7 @@ fun MessageBubble(
                 bottomStart = if (isCurrentUser) 16.dp else 4.dp,
                 bottomEnd = if (isCurrentUser) 4.dp else 16.dp
             ),
-            modifier = if (isCurrentUser && (onDelete != null || onEdit != null)) {
+            modifier = if ((isCurrentUser && (onDelete != null || onEdit != null)) || (isAdmin && onDelete != null)) {
                 Modifier.combinedClickable(
                     onClick = { },
                     onLongClick = { showOptionsDialog = true }
@@ -1296,7 +1298,7 @@ fun MessageBubble(
     }
 
     // Options dialog (Edit/Delete) - Using a simpler bottom sheet style dialog
-    if (showOptionsDialog && isCurrentUser) {
+    if (showOptionsDialog && (isCurrentUser || isAdmin)) {
         AlertDialog(
             onDismissRequest = { showOptionsDialog = false },
             title = null,
