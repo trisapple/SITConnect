@@ -59,6 +59,34 @@ sealed class AvailableUsersState {
     data class Error(val message: String) : AvailableUsersState()
 }
 
+sealed class CreateGroupState {
+    object Idle : CreateGroupState()
+    object Loading : CreateGroupState()
+    object Success : CreateGroupState()
+    data class Error(val message: String) : CreateGroupState()
+}
+
+data class ModuleInfo(
+    val code: String = "",
+    val name: String = "",
+    val enrolledStudents: List<String> = emptyList(),
+    val lecturerId: String? = null
+)
+
+sealed class ModulesListState {
+    object Idle : ModulesListState()
+    object Loading : ModulesListState()
+    data class Success(val modules: List<ModuleInfo>) : ModulesListState()
+    data class Error(val message: String) : ModulesListState()
+}
+
+sealed class DeleteGroupState {
+    object Idle : DeleteGroupState()
+    object Loading : DeleteGroupState()
+    object Success : DeleteGroupState()
+    data class Error(val message: String) : DeleteGroupState()
+}
+
 class MessagingViewModel : ViewModel() {
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     private val storage: FirebaseStorage = FirebaseStorage.getInstance()
@@ -80,6 +108,15 @@ class MessagingViewModel : ViewModel() {
 
     private val _availableUsersState = MutableStateFlow<AvailableUsersState>(AvailableUsersState.Idle)
     val availableUsersState: StateFlow<AvailableUsersState> = _availableUsersState
+
+    private val _createGroupState = MutableStateFlow<CreateGroupState>(CreateGroupState.Idle)
+    val createGroupState: StateFlow<CreateGroupState> = _createGroupState
+
+    private val _modulesListState = MutableStateFlow<ModulesListState>(ModulesListState.Idle)
+    val modulesListState: StateFlow<ModulesListState> = _modulesListState
+
+    private val _deleteGroupState = MutableStateFlow<DeleteGroupState>(DeleteGroupState.Idle)
+    val deleteGroupState: StateFlow<DeleteGroupState> = _deleteGroupState
 
     private var currentUserId: String = ""
     private var currentUserName: String = ""
@@ -315,6 +352,140 @@ class MessagingViewModel : ViewModel() {
     fun clearMembersState() {
         _membersState.value = MembersState.Idle
         _availableUsersState.value = AvailableUsersState.Idle
+    }
+
+    fun resetCreateGroupState() {
+        _createGroupState.value = CreateGroupState.Idle
+    }
+
+    fun resetDeleteGroupState() {
+        _deleteGroupState.value = DeleteGroupState.Idle
+    }
+
+    fun fetchModulesForSelection() {
+        viewModelScope.launch {
+            try {
+                _modulesListState.value = ModulesListState.Loading
+                withTimeout(15000L) {
+                    val snapshot = firestore.collection("modules").get().await()
+                    val modules = snapshot.documents.mapNotNull { doc ->
+                        val code = doc.getString("code") ?: return@mapNotNull null
+                        val name = doc.getString("name") ?: ""
+                        val enrolled = (doc.get("enrolledStudents") as? List<*>)
+                            ?.mapNotNull { it as? String } ?: emptyList()
+                        val lecturerId = doc.getString("lecturerId")
+                        ModuleInfo(code = code, name = name, enrolledStudents = enrolled, lecturerId = lecturerId)
+                    }.sortedBy { it.code }
+                    _modulesListState.value = ModulesListState.Success(modules)
+                }
+            } catch (e: Exception) {
+                _modulesListState.value = ModulesListState.Error(e.message ?: "Failed to fetch modules")
+            }
+        }
+    }
+
+    fun createChatRoom(name: String, description: String, type: ChatRoomType, selectedModuleCodes: List<String> = emptyList()) {
+        viewModelScope.launch {
+            try {
+                _createGroupState.value = CreateGroupState.Loading
+
+                withTimeout(15000L) {
+                    // Collect enrolled students from selected modules
+                    val autoMembers = mutableSetOf<String>()
+                    if (selectedModuleCodes.isNotEmpty()) {
+                        val allModulesSnapshot = firestore.collection("modules").get().await()
+                        for (moduleDoc in allModulesSnapshot.documents) {
+                            val code = moduleDoc.getString("code") ?: continue
+                            if (code in selectedModuleCodes) {
+                                val enrolled = (moduleDoc.get("enrolledStudents") as? List<*>)
+                                    ?.mapNotNull { it as? String } ?: emptyList()
+                                autoMembers.addAll(enrolled)
+                                val lecturerId = moduleDoc.getString("lecturerId")
+                                if (lecturerId != null) autoMembers.add(lecturerId)
+                            }
+                        }
+                    }
+
+                    val chatRoomId = UUID.randomUUID().toString()
+                    val chatRoomData = hashMapOf<String, Any>(
+                        "name" to name,
+                        "description" to description,
+                        "type" to type.name,
+                        "memberCount" to autoMembers.size,
+                        "createdAt" to com.google.firebase.Timestamp.now()
+                    )
+                    if (autoMembers.isNotEmpty()) {
+                        chatRoomData["members"] = autoMembers.toList()
+                    }
+                    // Store linked module codes for reference
+                    if (selectedModuleCodes.isNotEmpty()) {
+                        chatRoomData["linkedModules"] = selectedModuleCodes
+                    }
+
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .set(chatRoomData)
+                        .await()
+
+                    _createGroupState.value = CreateGroupState.Success
+
+                    // Refresh chat rooms list
+                    fetchChatRooms(currentUserId, currentUserName, isAdminUser)
+                }
+            } catch (e: TimeoutCancellationException) {
+                _createGroupState.value = CreateGroupState.Error("Request timed out. Please try again.")
+            } catch (e: Exception) {
+                _createGroupState.value = CreateGroupState.Error(e.message ?: "Failed to create group")
+            }
+        }
+    }
+
+    fun deleteChatRoom(chatRoom: ChatRoom) {
+        viewModelScope.launch {
+            try {
+                _deleteGroupState.value = DeleteGroupState.Loading
+
+                withTimeout(15000L) {
+                    val chatRoomId = chatRoom.id
+
+                    // Delete all messages in the chat room subcollection
+                    val messagesSnapshot = firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .collection("messages")
+                        .get()
+                        .await()
+
+                    for (msgDoc in messagesSnapshot.documents) {
+                        firestore.collection("chat_rooms")
+                            .document(chatRoomId)
+                            .collection("messages")
+                            .document(msgDoc.id)
+                            .delete()
+                            .await()
+                    }
+
+                    // Delete the chat room document itself
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .delete()
+                        .await()
+
+                    _deleteGroupState.value = DeleteGroupState.Success
+
+                    // If we were viewing this chat room, go back
+                    if (_selectedChatRoom.value?.id == chatRoomId) {
+                        clearSelectedChatRoom()
+                    }
+
+                    // Refresh chat rooms list
+                    fetchChatRooms(currentUserId, currentUserName, isAdminUser)
+                }
+            } catch (e: TimeoutCancellationException) {
+                _deleteGroupState.value = DeleteGroupState.Error("Request timed out. Please try again.")
+            } catch (e: Exception) {
+                _deleteGroupState.value = DeleteGroupState.Error(e.message ?: "Failed to delete group")
+            }
+        }
     }
 
     fun fetchAvailableUsersForModule(moduleCode: String) {

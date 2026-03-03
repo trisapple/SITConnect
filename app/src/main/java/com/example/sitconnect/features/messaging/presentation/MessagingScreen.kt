@@ -59,6 +59,10 @@ fun MessagingScreen(
     val userName = (userDataState as? UserDataState.Success)?.userData?.name ?: "User"
     val chatRoomsState by messagingViewModel.chatRoomsState.collectAsState()
     val selectedChatRoom by messagingViewModel.selectedChatRoom.collectAsState()
+    val createGroupState by messagingViewModel.createGroupState.collectAsState()
+    val deleteGroupState by messagingViewModel.deleteGroupState.collectAsState()
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var chatRoomToDelete by remember { mutableStateOf<ChatRoom?>(null) }
 
     // Fetch user data to determine role
     LaunchedEffect(currentUser?.uid) {
@@ -78,6 +82,22 @@ fun MessagingScreen(
         }
     }
 
+    // Dismiss create group dialog on success
+    LaunchedEffect(createGroupState) {
+        if (createGroupState is CreateGroupState.Success) {
+            showCreateGroupDialog = false
+            messagingViewModel.resetCreateGroupState()
+        }
+    }
+
+    // Reset delete state on success
+    LaunchedEffect(deleteGroupState) {
+        if (deleteGroupState is DeleteGroupState.Success) {
+            chatRoomToDelete = null
+            messagingViewModel.resetDeleteGroupState()
+        }
+    }
+
     if (selectedChatRoom != null) {
         ChatRoomScreen(
             chatRoom = selectedChatRoom!!,
@@ -89,89 +109,182 @@ fun MessagingScreen(
             onBack = { messagingViewModel.clearSelectedChatRoom() }
         )
     } else {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "Messaging",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
+        Box(modifier = modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                Text(
+                    text = "Messaging",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Join group discussions in chatrooms",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = "Join group discussions in chatrooms",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            when (chatRoomsState) {
-                is ChatRoomsState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-                is ChatRoomsState.Success -> {
-                    val chatRooms = (chatRoomsState as ChatRoomsState.Success).chatRooms
-
-                    if (chatRooms.isEmpty()) {
+                when (chatRoomsState) {
+                    is ChatRoomsState.Loading -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "No chat rooms available",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            CircularProgressIndicator()
                         }
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(chatRooms) { chatRoom ->
-                                ChatRoomListItem(
-                                    chatRoom = chatRoom,
-                                    onClick = { messagingViewModel.selectChatRoom(chatRoom) }
+                    }
+                    is ChatRoomsState.Success -> {
+                        val chatRooms = (chatRoomsState as ChatRoomsState.Success).chatRooms
+
+                        if (chatRooms.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No chat rooms available",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 80.dp) // space for FAB
+                            ) {
+                                items(chatRooms) { chatRoom ->
+                                    ChatRoomListItem(
+                                        chatRoom = chatRoom,
+                                        onClick = { messagingViewModel.selectChatRoom(chatRoom) },
+                                        isAdmin = isAdmin,
+                                        onDelete = { chatRoomToDelete = chatRoom }
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                is ChatRoomsState.Error -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            text = "Error: ${(chatRoomsState as ChatRoomsState.Error).message}",
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                    is ChatRoomsState.Error -> {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Text(
+                                text = "Error: ${(chatRoomsState as ChatRoomsState.Error).message}",
+                                modifier = Modifier.padding(16.dp),
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                    is ChatRoomsState.Idle -> {
+                        // Initial state
                     }
                 }
-                is ChatRoomsState.Idle -> {
-                    // Initial state
+            }
+
+            // FAB for admin to create new group
+            if (isAdmin) {
+                FloatingActionButton(
+                    onClick = { showCreateGroupDialog = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(24.dp),
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Create Group",
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
                 }
             }
+        }
+
+        // Create Group Dialog
+        if (showCreateGroupDialog && isAdmin) {
+            CreateGroupDialog(
+                createGroupState = createGroupState,
+                messagingViewModel = messagingViewModel,
+                onDismiss = {
+                    showCreateGroupDialog = false
+                    messagingViewModel.resetCreateGroupState()
+                },
+                onCreate = { name, description, type, selectedModuleCodes ->
+                    messagingViewModel.createChatRoom(name, description, type, selectedModuleCodes)
+                }
+            )
+        }
+
+        // Delete Group Confirmation Dialog
+        chatRoomToDelete?.let { chatRoom ->
+            AlertDialog(
+                onDismissRequest = {
+                    if (deleteGroupState !is DeleteGroupState.Loading) {
+                        chatRoomToDelete = null
+                        messagingViewModel.resetDeleteGroupState()
+                    }
+                },
+                title = { Text("Delete Group") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Are you sure you want to delete \"${chatRoom.name}\"? All messages in this group will be permanently deleted.")
+                        if (deleteGroupState is DeleteGroupState.Error) {
+                            Text(
+                                text = (deleteGroupState as DeleteGroupState.Error).message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { messagingViewModel.deleteChatRoom(chatRoom) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        enabled = deleteGroupState !is DeleteGroupState.Loading
+                    ) {
+                        if (deleteGroupState is DeleteGroupState.Loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onError
+                            )
+                        } else {
+                            Text("Delete")
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            chatRoomToDelete = null
+                            messagingViewModel.resetDeleteGroupState()
+                        },
+                        enabled = deleteGroupState !is DeleteGroupState.Loading
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatRoomListItem(
     chatRoom: ChatRoom,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isAdmin: Boolean = false,
+    onDelete: () -> Unit = {}
 ) {
     val typeColor = when (chatRoom.type) {
         ChatRoomType.MODULE -> Color(0xFF2196F3)
@@ -193,7 +306,16 @@ fun ChatRoomListItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .then(
+                if (isAdmin) {
+                    Modifier.combinedClickable(
+                        onClick = { onClick() },
+                        onLongClick = { onDelete() }
+                    )
+                } else {
+                    Modifier.clickable { onClick() }
+                }
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -1289,6 +1411,279 @@ fun MessageBubble(
             }
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CreateGroupDialog(
+    createGroupState: CreateGroupState,
+    messagingViewModel: MessagingViewModel,
+    onDismiss: () -> Unit,
+    onCreate: (name: String, description: String, type: ChatRoomType, selectedModuleCodes: List<String>) -> Unit
+) {
+    var groupName by remember { mutableStateOf("") }
+    var groupDescription by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(ChatRoomType.GENERAL) }
+    var nameError by remember { mutableStateOf<String?>(null) }
+    val selectedModuleCodes = remember { mutableStateListOf<String>() }
+
+    val modulesListState by messagingViewModel.modulesListState.collectAsState()
+
+    // Fetch modules when dialog opens
+    LaunchedEffect(Unit) {
+        messagingViewModel.fetchModulesForSelection()
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (createGroupState !is CreateGroupState.Loading) onDismiss()
+        },
+        title = { Text("Create New Group") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = groupName,
+                    onValueChange = {
+                        groupName = it
+                        nameError = null
+                    },
+                    label = { Text("Group Name") },
+                    placeholder = { Text("e.g. Study Group") },
+                    isError = nameError != null,
+                    supportingText = nameError?.let { { Text(it) } },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = createGroupState !is CreateGroupState.Loading
+                )
+
+                OutlinedTextField(
+                    value = groupDescription,
+                    onValueChange = { groupDescription = it },
+                    label = { Text("Description (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3,
+                    enabled = createGroupState !is CreateGroupState.Loading
+                )
+
+                // Type selector
+                Text(
+                    text = "Group Type",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(ChatRoomType.MODULE, ChatRoomType.GENERAL).forEach { type ->
+                            FilterChip(
+                                selected = selectedType == type,
+                                onClick = { selectedType = type },
+                                label = {
+                                    Text(
+                                        text = when (type) {
+                                            ChatRoomType.MODULE -> "📚 Module"
+                                            ChatRoomType.GENERAL -> "💬 General"
+                                            else -> type.name
+                                        },
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                enabled = createGroupState !is CreateGroupState.Loading
+                            )
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(ChatRoomType.STUDY_GROUP, ChatRoomType.CLUB).forEach { type ->
+                            FilterChip(
+                                selected = selectedType == type,
+                                onClick = { selectedType = type },
+                                label = {
+                                    Text(
+                                        text = when (type) {
+                                            ChatRoomType.STUDY_GROUP -> "👥 Study Group"
+                                            ChatRoomType.CLUB -> "🎯 Club"
+                                            else -> type.name
+                                        },
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                enabled = createGroupState !is CreateGroupState.Loading
+                            )
+                        }
+                    }
+                }
+
+                // Module selector
+                Text(
+                    text = "Link Modules (auto-add enrolled students)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                when (modulesListState) {
+                    is ModulesListState.Loading -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text("Loading modules...", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    is ModulesListState.Success -> {
+                        val modules = (modulesListState as ModulesListState.Success).modules
+                        if (modules.isEmpty()) {
+                            Text(
+                                text = "No modules available",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 180.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(modules) { module ->
+                                    val isSelected = module.code in selectedModuleCodes
+                                    val studentCount = module.enrolledStudents.size
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = createGroupState !is CreateGroupState.Loading) {
+                                                if (isSelected) {
+                                                    selectedModuleCodes.remove(module.code)
+                                                } else {
+                                                    selectedModuleCodes.add(module.code)
+                                                }
+                                            },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected)
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            else
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Checkbox(
+                                                checked = isSelected,
+                                                onCheckedChange = {
+                                                    if (isSelected) {
+                                                        selectedModuleCodes.remove(module.code)
+                                                    } else {
+                                                        selectedModuleCodes.add(module.code)
+                                                    }
+                                                },
+                                                enabled = createGroupState !is CreateGroupState.Loading,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "${module.code} ${module.name}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = "$studentCount student${if (studentCount != 1) "s" else ""} enrolled",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    is ModulesListState.Error -> {
+                        Text(
+                            text = "Failed to load modules",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    is ModulesListState.Idle -> {}
+                }
+
+                // Selected modules summary
+                if (selectedModuleCodes.isNotEmpty()) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "📚 ${selectedModuleCodes.size} module${if (selectedModuleCodes.size != 1) "s" else ""} selected: ${selectedModuleCodes.joinToString(", ")}. " +
+                                    "Enrolled students will be auto-added to the group.",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+
+                // Error from create state
+                if (createGroupState is CreateGroupState.Error) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = (createGroupState as CreateGroupState.Error).message,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (groupName.isBlank()) {
+                        nameError = "Group name is required"
+                    } else {
+                        onCreate(groupName.trim(), groupDescription.trim(), selectedType, selectedModuleCodes.toList())
+                    }
+                },
+                enabled = createGroupState !is CreateGroupState.Loading
+            ) {
+                if (createGroupState is CreateGroupState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Create")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = createGroupState !is CreateGroupState.Loading
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 private fun isToday(date: Date): Boolean {
