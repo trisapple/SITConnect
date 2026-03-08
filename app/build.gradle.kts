@@ -79,4 +79,8 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
+    // For WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
+
+
 }
