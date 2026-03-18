@@ -22,11 +22,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            isDebuggable = false
         }
     }
     compileOptions {
@@ -79,8 +81,8 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
-    // For WorkManager
-    implementation("androidx.work:work-runtime-ktx:2.8.1")
+    // WorkManager (2.8.x can crash at startup in newer toolchains/runtime combos)
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
 
 
 }
