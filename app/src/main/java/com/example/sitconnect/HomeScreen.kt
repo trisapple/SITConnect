@@ -1,7 +1,11 @@
 package com.example.sitconnect
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,13 +31,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import android.content.Intent
-import android.net.Uri
-import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
 import com.example.sitconnect.ui.theme.SITConnectTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class FeatureItem(
     val title: String,
@@ -60,6 +64,7 @@ fun HomeScreen(
     onNavigate: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val authState by viewModel.authState.collectAsState()
     val userDataState by userViewModel.userDataState.collectAsState()
     val user = (authState as? AuthState.Success)?.user
@@ -70,6 +75,13 @@ fun HomeScreen(
 
     // Permission dialog state
     var showPermissionDialog by remember { mutableStateOf(false) }
+
+    // Navigate to login when logged out
+    LaunchedEffect(authState) {
+        if (authState is AuthState.Idle) {
+            onLogout()
+        }
+    }
 
     // Check permissions once when HomeScreen first loads
     LaunchedEffect(Unit) {
@@ -88,29 +100,27 @@ fun HomeScreen(
     // Permission dialog
     if (showPermissionDialog) {
         AlertDialog(
-            onDismissRequest = { showPermissionDialog = false },
+            onDismissRequest = { },
             title = { Text("Location Permission Required") },
             text = {
                 Text(
                     "SIT Connect needs location access to support attendance tracking and " +
-                            "campus features. Please grant full location permissions to continue."
+                            "campus features. Please grant location permissions to continue."
                 )
             },
             confirmButton = {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center
                 ) {
                     TextButton(onClick = {
                         showPermissionDialog = false
+                        viewModel.logout()
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", context.packageName, null)
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-                        android.util.Log.d("PermissionDialog", "Launching settings for package: ${context.packageName}")
                         context.startActivity(intent)
-                        viewModel.logout()
-                        onLogout()
                     }) {
                         Text("Grant Permissions")
                     }
