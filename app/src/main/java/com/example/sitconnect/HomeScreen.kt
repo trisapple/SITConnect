@@ -8,14 +8,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -26,12 +23,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,11 +38,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
 import com.example.sitconnect.ui.theme.SITConnectTheme
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 data class FeatureItem(
     val title: String,
@@ -64,7 +62,7 @@ fun HomeScreen(
     onNavigate: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
     val authState by viewModel.authState.collectAsState()
     val userDataState by userViewModel.userDataState.collectAsState()
     val user = (authState as? AuthState.Success)?.user
@@ -76,6 +74,10 @@ fun HomeScreen(
     // Permission dialog state
     var showPermissionDialog by remember { mutableStateOf(false) }
 
+    fun refreshPermissionDialogState() {
+        showPermissionDialog = !context.areAllLocationPermissionsGranted()
+    }
+
     // Navigate to login when logged out
     LaunchedEffect(authState) {
         if (authState is AuthState.Idle) {
@@ -85,8 +87,19 @@ fun HomeScreen(
 
     // Check permissions once when HomeScreen first loads
     LaunchedEffect(Unit) {
-        if (!context.areAllLocationPermissionsGranted()) {
-            showPermissionDialog = true
+        refreshPermissionDialogState()
+    }
+
+    // Re-check permissions after returning from app settings.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshPermissionDialogState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -114,8 +127,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     TextButton(onClick = {
-                        showPermissionDialog = false
-                        viewModel.logout()
+//                        viewModel.logout()
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.fromParts("package", context.packageName, null)
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
