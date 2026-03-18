@@ -15,22 +15,32 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
 import com.example.sitconnect.ui.theme.SITConnectTheme
 
 data class FeatureItem(
@@ -49,6 +59,7 @@ fun HomeScreen(
     onLogout: () -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val authState by viewModel.authState.collectAsState()
     val userDataState by userViewModel.userDataState.collectAsState()
     val user = (authState as? AuthState.Success)?.user
@@ -57,11 +68,55 @@ fun HomeScreen(
     val isLecturer = userData?.roles?.lecturer == true
     val isAdmin = userData?.roles?.admin == true
 
+    // Permission dialog state
+    var showPermissionDialog by remember { mutableStateOf(false) }
+
+    // Check permissions once when HomeScreen first loads
+    LaunchedEffect(Unit) {
+        if (!context.areAllLocationPermissionsGranted()) {
+            showPermissionDialog = true
+        }
+    }
+
     // Fetch user data when user changes
     LaunchedEffect(user?.uid) {
         user?.uid?.let { uid ->
             userViewModel.fetchUserData(uid)
         }
+    }
+
+    // Permission dialog
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = { Text("Location Permission Required") },
+            text = {
+                Text(
+                    "SIT Connect needs location access to support attendance tracking and " +
+                            "campus features. Please grant full location permissions to continue."
+                )
+            },
+            confirmButton = {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TextButton(onClick = {
+                        showPermissionDialog = false
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        android.util.Log.d("PermissionDialog", "Launching settings for package: ${context.packageName}")
+                        context.startActivity(intent)
+                        viewModel.logout()
+                        onLogout()
+                    }) {
+                        Text("Grant Permissions")
+                    }
+                }
+            }
+        )
     }
 
     // Student features
@@ -193,7 +248,7 @@ fun HomeScreen(
         isStudent -> studentFeatures
         isLecturer -> lecturerFeatures
         isAdmin -> adminFeatures
-        else -> emptyList() // Loading or no role
+        else -> emptyList()
     }
 
     // Determine role text for welcome message
@@ -207,7 +262,7 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp,0.dp)
+            .padding(16.dp, 0.dp)
     ) {
         // Welcome Card
         Card(
