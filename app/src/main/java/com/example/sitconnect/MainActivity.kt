@@ -70,17 +70,6 @@ class MainActivity : ComponentActivity() {
                     contentWindowInsets = WindowInsets(0.dp)
                 ) { innerPadding ->
                     SITConnectNavigation(modifier = Modifier.padding(innerPadding))
-
-                    PermissionAccessPopup(
-                        visible = isPermissionPopupVisible,
-                        missingLocation = missingLocationPermission,
-                        missingAllFiles = missingAllFilesPermission,
-                        missingBatteryOptimization = missingBatteryOptimizationExemption,
-                        onOpenLocationSettings = { requestLocationAccess() },
-                        onOpenAllFilesSettings = { openAllFilesSettings() },
-                        onOpenBatterySettings = { openBatteryOptimizationSettings() },
-                        onDismiss = { isPermissionPopupVisible = false }
-                    )
                 }
             }
         }
@@ -274,58 +263,4 @@ class MainActivity : ComponentActivity() {
 
         settingsLauncher.launch(intentToLaunch)
     }
-}
-
-@Composable
-private fun PermissionAccessPopup(
-    visible: Boolean,
-    missingLocation: Boolean,
-    missingAllFiles: Boolean,
-    missingBatteryOptimization: Boolean,
-    onOpenLocationSettings: () -> Unit,
-    onOpenAllFilesSettings: () -> Unit,
-    onOpenBatterySettings: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    if (!visible) return
-
-    val requiredAccess = buildList {
-        if (missingLocation) add("- Location: Precise + Always Allow")
-        if (missingAllFiles) add("- Files: Allow access to manage all files")
-        if (missingBatteryOptimization) add("- Battery: Disable battery optimization for this app")
-    }.joinToString("\n")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Permissions needed") },
-        text = {
-            Text("To keep the app running correctly, enable:\n\n$requiredAccess")
-        },
-        confirmButton = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (missingLocation) {
-                    TextButton(onClick = onOpenLocationSettings) {
-                        Text("Grant location access")
-                    }
-                }
-                if (missingAllFiles) {
-                    TextButton(onClick = onOpenAllFilesSettings) {
-                        Text("Grant all files access")
-                    }
-                }
-                if (missingBatteryOptimization) {
-                    TextButton(onClick = onOpenBatterySettings) {
-                        Text("Ignore battery optimizations")
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text("Not now")
-                }
-            }
-        }
-    )
 }

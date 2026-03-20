@@ -1,7 +1,11 @@
 package com.example.sitconnect
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -73,9 +77,28 @@ fun HomeScreen(
 
     // Permission dialog state
     var showPermissionDialog by remember { mutableStateOf(false) }
+    var missingLocation by remember { mutableStateOf(false) }
+    var missingFiles by remember { mutableStateOf(false) }
+    var missingBattery by remember { mutableStateOf(false) }
 
     fun refreshPermissionDialogState() {
-        showPermissionDialog = !context.areAllLocationPermissionsGranted()
+        missingLocation = !context.areAllLocationPermissionsGranted()
+        
+        missingFiles = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            !Environment.isExternalStorageManager()
+        } else {
+            false
+        }
+
+        missingBattery = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val isIgnoring = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+            !isIgnoring
+        } else {
+            false
+        }
+
+        showPermissionDialog = missingLocation || missingFiles || missingBattery
     }
 
     // Navigate to login when logged out
@@ -112,29 +135,63 @@ fun HomeScreen(
 
     // Permission dialog
     if (showPermissionDialog) {
+        val requiredText = buildString {
+            append("SIT Connect needs the following permissions to support attendance tracking and campus features:\n\n")
+            if (missingLocation) append("• Location: Precise + Always Allow\n")
+            if (missingFiles) append("• Files: Allow management of all files\n")
+            if (missingBattery) append("• Battery: Ignore battery optimizations\n")
+        }
+
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Location Permission Required") },
+            title = { Text("Permissions Required") },
             text = {
-                Text(
-                    "SIT Connect needs location access to support attendance tracking and " +
-                            "campus features. Please grant location permissions to continue."
-                )
+                Text(requiredText)
             },
             confirmButton = {
-                Box(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    TextButton(onClick = {
-//                        viewModel.logout()
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (missingLocation) {
+                        TextButton(onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        }) {
+                            Text("Grant Location")
                         }
-                        context.startActivity(intent)
-                    }) {
-                        Text("Grant Permissions")
+                    }
+                    
+                    if (missingFiles) {
+                         TextButton(onClick = {
+                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                  val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                     data = Uri.fromParts("package", context.packageName, null)
+                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                  }
+                                  context.startActivity(intent)
+                             }
+                        }) {
+                            Text("Grant All Files Access")
+                        }
+                    }
+
+                    if (missingBattery) {
+                         TextButton(onClick = {
+                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                  val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                      data = Uri.parse("package:${context.packageName}")
+                                      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                  }
+                                  context.startActivity(intent)
+                             }
+                        }) {
+                            Text("Ignore Battery Optimization")
+                        }
                     }
                 }
             }
