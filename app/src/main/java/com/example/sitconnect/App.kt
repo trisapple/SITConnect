@@ -23,8 +23,8 @@ class App : Application() {
                 action = "com.example.sitconnect.RESTART_SERVICE"
             }
             
-            // Increase delay to avoid crash loop detection (5 seconds)
-            val restartDelay = 5000L
+            // Reduce delay to make restart immediate (was 5000L)
+            val restartDelay = 100L
 
             // Use FLAG_CANCEL_CURRENT to ensure we have a fresh pending intent
             val pendingIntent = PendingIntent.getBroadcast(

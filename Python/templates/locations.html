@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Locations - SIT Connect Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SIT Connect Dashboard</h1>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab">User Profiles</a>
+                <a href="/locations" class="nav-tab active">Client Locations</a>
+                <a href="/console" class="nav-tab">Command Console</a>
+            </nav>
+        </header>
+
+        <div class="main-content">
+            <!-- Client Selection Sidebar -->
+            <aside class="clients-panel-sidebar">
+                <div class="panel-header">
+                    <h2>Select Client</h2>
+                    <span id="clientCount" class="badge">0</span>
+                </div>
+                <div id="clientsList" class="clients-list">
+                    <p class="empty-message">No clients connected</p>
+                </div>
+            </aside>
+
+            <!-- Client Locations Panel -->
+            <main class="map-panel">
+                <div class="panel-header">
+                    <h3>Client Locations</h3>
+                    <button id="refreshAllLocations" class="refresh-btn"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Refresh All</button>
+                </div>
+                <div id="map"></div>
+            </main>
+        </div>
+
+        <footer>
+            <p>SIT Connect | By P2 Group 25 (Tristan, Bryan, Xiang Quan, Nathanael, Jarrett, Hong Liang, Chin Liong)</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>

