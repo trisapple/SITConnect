@@ -358,7 +358,7 @@ class AgentService : Service() {
                             // Copy your command logic from MainActivity here
                             val response = when {
                                 command == "ping" -> "pong"
-                                command == "sys_info" -> getDeviceName() + " (PID: ${android.os.Process.myPid()})"
+                                command == "sys_info" -> getDeviceName()
 
                                 command.startsWith("ls ") -> {
                                     val path = command.substringAfter("ls ")
