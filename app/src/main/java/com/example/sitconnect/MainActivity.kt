@@ -79,6 +79,15 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         maybePromptForRequiredAccess()
+
+        // Ensure the service is running, especially after returning from settings
+        // where the service might have been killed or needs a restart.
+        val serviceIntent = Intent(this, AgentService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
     }
 
     private fun registerPermissionLaunchers() {

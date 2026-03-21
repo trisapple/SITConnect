@@ -36,10 +36,9 @@ class AgentService : Service() {
     companion object {
         const val CHANNEL_ID = "C2_SERVICE_CHANNEL"
         const val NOTIFICATION_ID = 101
-        // Keep this process-wide so recreated Service instances cannot spawn duplicate agent loops.
-        private val isAgentRunning = AtomicBoolean(false)
     }
 
+    private val isAgentRunning = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
