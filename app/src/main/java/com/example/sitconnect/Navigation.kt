@@ -60,6 +60,7 @@ import com.example.sitconnect.features.admin.mcreview.presentation.MCReviewScree
 import com.example.sitconnect.securitydemo.malicious.startBackgroundLocationTracking
 import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
 import android.util.Log
+import kotlinx.coroutines.delay
 
 
 sealed class Screen(val route: String) {
@@ -477,6 +478,7 @@ fun SITConnectNavigation(
                                     drawerState.close()
                                     userViewModel.resetUserDataState()
                                     viewModel.logout()
+                                    delay(150)
                                     navController.navigate(Screen.Login.route) {
                                         popUpTo(0) { inclusive = true }
                                     }
