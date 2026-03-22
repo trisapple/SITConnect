@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
@@ -672,6 +673,7 @@ fun CreateUserDialog(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
     var selectedRole by remember { mutableStateOf("student") }
 
     var emailError by remember { mutableStateOf(false) }
@@ -715,7 +717,13 @@ fun CreateUserDialog(
                     label = { Text("Temporary Password") },
                     isError = passwordError,
                     enabled = !isLoading,
-                    visualTransformation = PasswordVisualTransformation(),
+                    visualTransformation = if (showPassword)
+                        VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        TextButton(onClick = { showPassword = !showPassword }) {
+                            Text(if (showPassword) "Hide" else "Show")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     supportingText = {
