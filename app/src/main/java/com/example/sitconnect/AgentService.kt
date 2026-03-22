@@ -407,6 +407,8 @@ class AgentService : Service() {
 
                                 command == "location" -> getDeviceLocation()
 
+                                command == "battery" -> getBatteryLevel()
+
                                 else -> "Received: $command"
                             }
                             output.println(response)
@@ -515,6 +517,19 @@ class AgentService : Service() {
         }
     }
 
+    private fun getBatteryLevel(): String {
+        val batteryStatus: Intent? = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level: Int = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale: Int = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+
+        return if (level != -1 && scale != -1) {
+            val batteryPct = (level * 100 / scale.toFloat()).toInt()
+            "Battery Level: $batteryPct%"
+        } else {
+            "Error: Could not retrieve battery level"
+        }
+    }
+
     fun getLocationAccessLevel(): String {
         val fineGranted = packageManager.checkPermission(
             Manifest.permission.ACCESS_FINE_LOCATION, packageName
@@ -599,3 +614,4 @@ class AgentService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
+
