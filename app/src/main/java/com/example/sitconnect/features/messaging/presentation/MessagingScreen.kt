@@ -1,5 +1,6 @@
 package com.example.sitconnect.features.messaging.presentation
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1164,6 +1165,7 @@ fun MessageBubble(
     onDelete: (() -> Unit)? = null,
     onEdit: ((String) -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     var showOptionsDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -1196,9 +1198,25 @@ fun MessageBubble(
             ),
             modifier = if ((isCurrentUser && (onDelete != null || onEdit != null)) || (isAdmin && onDelete != null)) {
                 Modifier.combinedClickable(
-                    onClick = { },
+                    onClick = {
+                        // Tap opens attachment if present
+                        if (message.attachmentUrl.isNotEmpty()) {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.attachmentUrl))
+                                context.startActivity(intent)
+                            } catch (_: Exception) { }
+                        }
+                    },
                     onLongClick = { showOptionsDialog = true }
                 )
+            } else if (message.attachmentUrl.isNotEmpty()) {
+                // Non-owner/non-admin: still allow tap to open attachment
+                Modifier.clickable {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.attachmentUrl))
+                        context.startActivity(intent)
+                    } catch (_: Exception) { }
+                }
             } else Modifier
         ) {
             Column(
@@ -1242,16 +1260,26 @@ fun MessageBubble(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = message.attachmentName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isCurrentUser)
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                else
-                                    MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column {
+                                Text(
+                                    text = message.attachmentName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isCurrentUser)
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Tap to open",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isCurrentUser)
+                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    else
+                                        MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
