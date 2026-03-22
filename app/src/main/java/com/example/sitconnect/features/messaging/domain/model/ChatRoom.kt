@@ -11,14 +11,16 @@ data class ChatRoom(
     val memberCount: Int = 0,
     val lastMessage: String? = null,
     val lastMessageTime: Date? = null,
-    val imageUrl: String = ""
+    val imageUrl: String = "",
+    val participants: List<String> = emptyList() // For DIRECT_MESSAGE: list of 2 user UIDs
 )
 
 enum class ChatRoomType {
     MODULE,
     STUDY_GROUP,
     CLUB,
-    GENERAL
+    GENERAL,
+    DIRECT_MESSAGE
 }
 
 data class ChatMessage(

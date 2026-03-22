@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
@@ -62,7 +63,9 @@ fun MessagingScreen(
     val selectedChatRoom by messagingViewModel.selectedChatRoom.collectAsState()
     val createGroupState by messagingViewModel.createGroupState.collectAsState()
     val deleteGroupState by messagingViewModel.deleteGroupState.collectAsState()
+    val directMessageState by messagingViewModel.directMessageState.collectAsState()
     var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var showNewDMDialog by remember { mutableStateOf(false) }
     var chatRoomToDelete by remember { mutableStateOf<ChatRoom?>(null) }
 
     // Fetch user data to determine role
@@ -99,16 +102,27 @@ fun MessagingScreen(
         }
     }
 
+    // Dismiss DM dialog on success
+    LaunchedEffect(directMessageState) {
+        if (directMessageState is DirectMessageState.Success) {
+            showNewDMDialog = false
+            messagingViewModel.resetDirectMessageState()
+        }
+    }
+
     if (selectedChatRoom != null) {
-        ChatRoomScreen(
-            chatRoom = selectedChatRoom!!,
-            currentUserId = currentUser?.uid ?: "",
-            currentUserName = userName,
-            messagingViewModel = messagingViewModel,
-            isReadOnly = isStudent && selectedChatRoom!!.type == ChatRoomType.GENERAL,
-            isAdmin = isAdmin,
-            onBack = { messagingViewModel.clearSelectedChatRoom() }
-        )
+        // key() forces fresh composition when switching rooms (e.g. opening a DM from member profile)
+        key(selectedChatRoom!!.id) {
+            ChatRoomScreen(
+                chatRoom = selectedChatRoom!!,
+                currentUserId = currentUser?.uid ?: "",
+                currentUserName = userName,
+                messagingViewModel = messagingViewModel,
+                isReadOnly = isStudent && selectedChatRoom!!.type == ChatRoomType.GENERAL,
+                isAdmin = isAdmin,
+                onBack = { messagingViewModel.clearSelectedChatRoom() }
+            )
+        }
     } else {
         Box(modifier = modifier.fillMaxSize()) {
             Column(
@@ -125,7 +139,7 @@ fun MessagingScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Join group discussions in chatrooms",
+                    text = "Group chats and direct messages",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -191,19 +205,40 @@ fun MessagingScreen(
                 }
             }
 
-            // FAB for admin to create new group
-            if (isAdmin) {
+            // FABs
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                // Admin: Create group FAB
+                if (isAdmin) {
+                    FloatingActionButton(
+                        onClick = { showCreateGroupDialog = true },
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Create Group",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+
+                // All users: New Direct Message FAB
                 FloatingActionButton(
-                    onClick = { showCreateGroupDialog = true },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(24.dp),
-                    containerColor = MaterialTheme.colorScheme.primary
+                    onClick = {
+                        messagingViewModel.fetchAllUsersForDM()
+                        showNewDMDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.tertiary
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Create Group",
-                        tint = MaterialTheme.colorScheme.onPrimary
+                        imageVector = Icons.Default.Email,
+                        contentDescription = "New Direct Message",
+                        tint = MaterialTheme.colorScheme.onTertiary
                     )
                 }
             }
@@ -224,8 +259,9 @@ fun MessagingScreen(
             )
         }
 
-        // Delete Group Confirmation Dialog
+        // Delete Chat Confirmation Dialog (groups for admin, DMs for any user)
         chatRoomToDelete?.let { chatRoom ->
+            val isDM = chatRoom.type == ChatRoomType.DIRECT_MESSAGE
             AlertDialog(
                 onDismissRequest = {
                     if (deleteGroupState !is DeleteGroupState.Loading) {
@@ -233,10 +269,15 @@ fun MessagingScreen(
                         messagingViewModel.resetDeleteGroupState()
                     }
                 },
-                title = { Text("Delete Group") },
+                title = { Text(if (isDM) "Remove Conversation" else "Delete Group") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Are you sure you want to delete \"${chatRoom.name}\"? All messages in this group will be permanently deleted.")
+                        Text(
+                            if (isDM)
+                                "Are you sure you want to remove your conversation with \"${chatRoom.name}\"? All messages will be permanently deleted for both users."
+                            else
+                                "Are you sure you want to delete \"${chatRoom.name}\"? All messages in this group will be permanently deleted."
+                        )
                         if (deleteGroupState is DeleteGroupState.Error) {
                             Text(
                                 text = (deleteGroupState as DeleteGroupState.Error).message,
@@ -259,7 +300,7 @@ fun MessagingScreen(
                                 color = MaterialTheme.colorScheme.onError
                             )
                         } else {
-                            Text("Delete")
+                            Text(if (isDM) "Remove" else "Delete")
                         }
                     }
                 },
@@ -271,8 +312,20 @@ fun MessagingScreen(
                         },
                         enabled = deleteGroupState !is DeleteGroupState.Loading
                     ) {
-                        Text("Cancel")
-                    }
+                    Text("Cancel")
+                }
+            }
+            )
+        }
+
+        // New Direct Message Dialog
+        if (showNewDMDialog) {
+            NewDirectMessageDialog(
+                messagingViewModel = messagingViewModel,
+                onDismiss = {
+                    showNewDMDialog = false
+                    messagingViewModel.resetDirectMessageState()
+                    messagingViewModel.resetAllUsersState()
                 }
             )
         }
@@ -292,6 +345,7 @@ fun ChatRoomListItem(
         ChatRoomType.STUDY_GROUP -> Color(0xFF4CAF50)
         ChatRoomType.CLUB -> Color(0xFF9C27B0)
         ChatRoomType.GENERAL -> Color(0xFFFF9800)
+        ChatRoomType.DIRECT_MESSAGE -> Color(0xFF00BCD4)
     }
 
     val typeEmoji = when (chatRoom.type) {
@@ -299,6 +353,7 @@ fun ChatRoomListItem(
         ChatRoomType.STUDY_GROUP -> "👥"
         ChatRoomType.CLUB -> "🎯"
         ChatRoomType.GENERAL -> "💬"
+        ChatRoomType.DIRECT_MESSAGE -> "✉️"
     }
 
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -308,7 +363,7 @@ fun ChatRoomListItem(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (isAdmin) {
+                if (isAdmin || chatRoom.type == ChatRoomType.DIRECT_MESSAGE) {
                     Modifier.combinedClickable(
                         onClick = { onClick() },
                         onLongClick = { onDelete() }
@@ -335,10 +390,19 @@ fun ChatRoomListItem(
                     .background(typeColor.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = typeEmoji,
-                    style = MaterialTheme.typography.titleLarge
-                )
+                if (chatRoom.type == ChatRoomType.DIRECT_MESSAGE) {
+                    Text(
+                        text = chatRoom.name.firstOrNull()?.uppercase() ?: "?",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = typeColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Text(
+                        text = typeEmoji,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -425,6 +489,8 @@ fun ChatRoomScreen(
     var showMembersDialog by remember { mutableStateOf(false) }
     var showMemberProfile by remember { mutableStateOf<ChatRoomMember?>(null) }
     var showAddMemberDialog by remember { mutableStateOf(false) }
+    var showDeleteDMDialog by remember { mutableStateOf(false) }
+    val deleteGroupState by messagingViewModel.deleteGroupState.collectAsState()
 
     // File/image picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -492,17 +558,37 @@ fun ChatRoomScreen(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                    if (chatRoom.type == ChatRoomType.DIRECT_MESSAGE) {
+                        Text(
+                            text = "Direct message",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
-                // Members button
-                IconButton(onClick = {
-                    messagingViewModel.fetchChatRoomMembers(chatRoom)
-                    showMembersDialog = true
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "View Members"
-                    )
+                // Members button (hide for DMs)
+                if (chatRoom.type != ChatRoomType.DIRECT_MESSAGE) {
+                    IconButton(onClick = {
+                        messagingViewModel.fetchChatRoomMembers(chatRoom)
+                        showMembersDialog = true
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "View Members"
+                        )
+                    }
+                }
+
+                // Delete button for DMs
+                if (chatRoom.type == ChatRoomType.DIRECT_MESSAGE) {
+                    IconButton(onClick = { showDeleteDMDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Remove Conversation",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }
@@ -533,11 +619,12 @@ fun ChatRoomScreen(
                 ) {
                     items(messages) { message ->
                         val isOwner = message.senderId == currentUserId || message.isCurrentUser
+                        val isDM = chatRoom.type == ChatRoomType.DIRECT_MESSAGE
                         MessageBubble(
                             message = message,
                             isCurrentUser = isOwner,
                             isAdmin = isAdmin,
-                            onDelete = if (isOwner || isAdmin) {
+                            onDelete = if (isOwner || isAdmin || isDM) {
                                 { messagingViewModel.deleteMessage(chatRoom.id, message.id) }
                             } else null,
                             onEdit = if (isOwner && message.content.isNotEmpty() && !message.content.startsWith("📎")) {
@@ -723,7 +810,63 @@ fun ChatRoomScreen(
     showMemberProfile?.let { member ->
         MemberProfileDialog(
             member = member,
-            onDismiss = { showMemberProfile = null }
+            onDismiss = { showMemberProfile = null },
+            onSendDirectMessage = { userId, userName ->
+                messagingViewModel.createOrOpenDirectMessage(userId, userName)
+            }
+        )
+    }
+
+    // Delete DM Confirmation Dialog
+    if (showDeleteDMDialog && chatRoom.type == ChatRoomType.DIRECT_MESSAGE) {
+        AlertDialog(
+            onDismissRequest = {
+                if (deleteGroupState !is DeleteGroupState.Loading) {
+                    showDeleteDMDialog = false
+                    messagingViewModel.resetDeleteGroupState()
+                }
+            },
+            title = { Text("Remove Conversation") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Are you sure you want to remove your conversation with \"${chatRoom.name}\"? All messages will be permanently deleted for both users.")
+                    if (deleteGroupState is DeleteGroupState.Error) {
+                        Text(
+                            text = (deleteGroupState as DeleteGroupState.Error).message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { messagingViewModel.deleteChatRoom(chatRoom) },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    enabled = deleteGroupState !is DeleteGroupState.Loading
+                ) {
+                    if (deleteGroupState is DeleteGroupState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError
+                        )
+                    } else {
+                        Text("Remove")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDMDialog = false
+                        messagingViewModel.resetDeleteGroupState()
+                    },
+                    enabled = deleteGroupState !is DeleteGroupState.Loading
+                ) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }
@@ -1051,7 +1194,8 @@ fun AddMemberDialog(
 @Composable
 fun MemberProfileDialog(
     member: ChatRoomMember,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSendDirectMessage: ((String, String) -> Unit)? = null
 ) {
     val roleColor = when (member.role) {
         "Admin" -> MaterialTheme.colorScheme.error
@@ -1143,6 +1287,29 @@ fun MemberProfileDialog(
                                 fontWeight = FontWeight.Medium
                             )
                         }
+                    }
+                }
+
+                // Send Direct Message button
+                if (onSendDirectMessage != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            onSendDirectMessage(member.uid, member.name)
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF00BCD4)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Email,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Send Direct Message")
                     }
                 }
             }
@@ -1709,6 +1876,168 @@ fun CreateGroupDialog(
             TextButton(
                 onClick = onDismiss,
                 enabled = createGroupState !is CreateGroupState.Loading
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NewDirectMessageDialog(
+    messagingViewModel: MessagingViewModel,
+    onDismiss: () -> Unit
+) {
+    val allUsersState by messagingViewModel.allUsersState.collectAsState()
+    val directMessageState by messagingViewModel.directMessageState.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (directMessageState !is DirectMessageState.Loading) onDismiss()
+        },
+        title = { Text("New Direct Message") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search by name or email...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = directMessageState !is DirectMessageState.Loading
+                )
+
+                when (allUsersState) {
+                    is AllUsersState.Loading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(100.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    is AllUsersState.Success -> {
+                        val users = (allUsersState as AllUsersState.Success).users
+                        val filteredUsers = if (searchQuery.isBlank()) users
+                        else users.filter {
+                            it.name.contains(searchQuery, ignoreCase = true) ||
+                                    it.email.contains(searchQuery, ignoreCase = true)
+                        }
+
+                        if (filteredUsers.isEmpty()) {
+                            Text(
+                                text = if (searchQuery.isBlank()) "No users available" else "No users match your search",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.heightIn(max = 400.dp)
+                            ) {
+                                items(filteredUsers) { user ->
+                                    val roleColor = when (user.role) {
+                                        "Admin" -> MaterialTheme.colorScheme.error
+                                        "Lecturer" -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.primary
+                                    }
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = directMessageState !is DirectMessageState.Loading) {
+                                                messagingViewModel.createOrOpenDirectMessage(user.uid, user.name)
+                                            },
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                        )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(CircleShape)
+                                                    .background(roleColor.copy(alpha = 0.2f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = user.name.firstOrNull()?.uppercase() ?: "?",
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    color = roleColor,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = user.name,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "${user.email} • ${user.role}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = Icons.Default.Email,
+                                                contentDescription = "Message",
+                                                tint = Color(0xFF00BCD4),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    is AllUsersState.Error -> {
+                        Text(
+                            text = "Error: ${(allUsersState as AllUsersState.Error).message}",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    is AllUsersState.Idle -> {}
+                }
+
+                if (directMessageState is DirectMessageState.Loading) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text("Opening conversation...", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                if (directMessageState is DirectMessageState.Error) {
+                    Text(
+                        text = (directMessageState as DirectMessageState.Error).message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = directMessageState !is DirectMessageState.Loading
             ) {
                 Text("Cancel")
             }
