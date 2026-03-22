@@ -35,8 +35,8 @@ data class PasswordValidationResult(
 fun validatePassword(password: String): PasswordValidationResult {
     val errors = mutableListOf<String>()
 
-    if (password.length < 8) {
-        errors.add("Password must be at least 8 characters")
+    if (password.length < 6) {
+        errors.add("Password must be at least 6 characters")
     }
 
     if (password.length > 128) {
@@ -47,16 +47,8 @@ fun validatePassword(password: String): PasswordValidationResult {
         errors.add("Password must contain at least one uppercase letter")
     }
 
-    if (!password.any { it.isLowerCase() }) {
-        errors.add("Password must contain at least one lowercase letter")
-    }
-
-    if (!password.any { it.isDigit() }) {
-        errors.add("Password must contain at least one digit")
-    }
-
     if (!password.any { !it.isLetterOrDigit() }) {
-        errors.add("Password must contain at least one special character (!@#$%^&*)")
+        errors.add("Password must contain at least one special character (!@#\$%^&*)")
     }
 
     return PasswordValidationResult(

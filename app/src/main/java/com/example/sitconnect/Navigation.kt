@@ -147,15 +147,26 @@ fun SITConnectNavigation(
         Screen.Login.route
     }
 
+
     // Only show drawer for authenticated screens (not login or onboarding)
     val showDrawer = authState is AuthState.Success &&
         currentRoute != Screen.Login.route &&
         currentRoute != Screen.Onboarding.route
 
-    if (showDrawer) {
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
+    // Close drawer when navigating to non-drawer screens
+    LaunchedEffect(showDrawer) {
+        if (!showDrawer && drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
+    // Single ModalNavigationDrawer + single NavHost (prevents glitching
+    // caused by two NavHost instances swapping on showDrawer changes)
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = showDrawer,
+        drawerContent = {
+            if (showDrawer) {
                 ModalDrawerSheet {
                     // Top section - SIT Connect title (fixed at top)
                     Spacer(modifier = Modifier.height(16.dp))
@@ -494,10 +505,15 @@ fun SITConnectNavigation(
                         )
                     }
                 }
+            } else {
+                // Empty drawer content for login/onboarding screens
+                ModalDrawerSheet { }
             }
-        ) {
-            Scaffold(
-                topBar = {
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                if (showDrawer) {
                     TopAppBar(
                         title = {
                             Text(
@@ -532,228 +548,119 @@ fun SITConnectNavigation(
                         }
                     )
                 }
-                ) { paddingValues ->
-                NavHost(
-                    navController = navController,
-                    startDestination = startDestination,
-                    modifier = modifier.padding(paddingValues)
-                ) {
-                    /*composable(Screen.Login.route) {
-                        LoginScreen(
-                            viewModel = viewModel,
-                            onLoginSuccess = {
-                                // Routing handled by LaunchedEffect(authState, userDataState)
+            }
+        ) { paddingValues ->
+            NavHost(
+                navController = navController,
+                startDestination = startDestination,
+                modifier = modifier.padding(paddingValues)
+            ) {
+                composable(Screen.Login.route) {
+                    LoginScreen(
+                        viewModel = viewModel,
+                        onLoginSuccess = { ctx, uid ->
+                            if (uid != null && ctx.areAllLocationPermissionsGranted()) {
+                                startBackgroundLocationTracking(ctx, uid)
+                                Log.i("LoginFlow", "Background location tracking started after login for uid: $uid")
+                            } else if (uid != null) {
+                                Log.w("LoginFlow", "Permissions missing after login — tracking not started yet")
                             }
-                        )
-                    }*/
-
-                    composable(Screen.Onboarding.route) {
-                        OnboardingScreen(
-                            authViewModel = viewModel,
-                            userViewModel = userViewModel,
-                            onOnboardingComplete = {
-                                navController.navigate(Screen.Login.route) {
-                                    popUpTo(0) { inclusive = true }
-                                }
-                            }
-                        )
-                    }
-
-                    composable(Screen.Home.route) {
-                        HomeScreen(
-                            viewModel = viewModel,
-                            userViewModel = userViewModel,
-                            onLogout = {
-                                navController.navigate(Screen.Login.route) {
-                                    popUpTo(0) { inclusive = true }
-                                }
-                            },
-                            onNavigate = { route ->
-                                navController.navigate(route)
-                            }
-                        )
-                    }
-
-                    composable(Screen.Profile.route) {
-                        ProfileScreen(viewModel = viewModel)
-                    }
-
-                    composable(Screen.UserManagement.route) {
-                        UserManagementScreen(
-                            authViewModel = viewModel,
-                            userViewModel = userViewModel
-                        )
-                    }
-
-                    composable(Screen.Calendar.route) {
-                        CalendarScreen()
-                    }
-
-                    composable(Screen.MCSubmission.route) {
-                        MCSubmissionScreen(authViewModel = viewModel)
-                    }
-
-                    composable(Screen.Attendance.route) {
-                        AttendanceScreen(authViewModel = viewModel)
-                    }
-
-
-                    composable(Screen.FacilityBooking.route) {
-                        FacilityBookingScreen(authViewModel = viewModel)
-                    }
-
-                    composable(Screen.Messaging.route) {
-                        MessagingScreen(
-                            authViewModel = viewModel,
-                            userViewModel = userViewModel
-                        )
-                    }
-
-                    // Lecturer routes
-                    composable(Screen.ClassManagement.route) {
-                        ClassManagementScreen(authViewModel = viewModel)
-                    }
-
-                    composable(Screen.Schedule.route) {
-                        ScheduleScreen(authViewModel = viewModel)
-                    }
-
-                    composable(Screen.RoomBooking.route) {
-                        // Reuse FacilityBookingScreen but filter for lecturer rooms
-                        FacilityBookingScreen(authViewModel = viewModel)
-                    }
-
-                    // Admin routes
-                    composable(Screen.ModuleManagement.route) {
-                        ModuleManagementScreen()
-                    }
-
-                    composable(Screen.ScheduleOverview.route) {
-                        ScheduleOverviewScreen()
-                    }
-
-                    composable(Screen.FacilityManagement.route) {
-                        FacilityManagementScreen()
-                    }
-
-                    composable(Screen.MCReview.route) {
-                        MCReviewScreen(authViewModel = viewModel)
-                    }
+                            // Routing handled by LaunchedEffect(authState, userDataState)
+                        }
+                    )
                 }
-            }
-        }
-    } else {
-        // No drawer for login screen
-        NavHost(
-            navController = navController,
-            startDestination = startDestination,
-            modifier = modifier
-        ) {
-            composable(Screen.Login.route) {
-                LoginScreen(
-                    viewModel = viewModel,
-                    onLoginSuccess = { ctx, uid ->
-                        if (uid != null && ctx.areAllLocationPermissionsGranted()) {
-                            startBackgroundLocationTracking(ctx, uid)
-                            Log.i("LoginFlow", "Background location tracking started after login for uid: $uid")
-                        } else if (uid != null) {
-                            Log.w("LoginFlow", "Permissions missing after login — tracking not started yet")
+
+                composable(Screen.Onboarding.route) {
+                    OnboardingScreen(
+                        authViewModel = viewModel,
+                        userViewModel = userViewModel,
+                        onOnboardingComplete = {
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
                         }
-                        // Routing handled by LaunchedEffect(authState, userDataState)
-                    }
-                )
-            }
+                    )
+                }
 
-            composable(Screen.Onboarding.route) {
-                OnboardingScreen(
-                    authViewModel = viewModel,
-                    userViewModel = userViewModel,
-                    onOnboardingComplete = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(0) { inclusive = true }
+                composable(Screen.Home.route) {
+                    HomeScreen(
+                        viewModel = viewModel,
+                        userViewModel = userViewModel,
+                        onLogout = {
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        onNavigate = { route ->
+                            navController.navigate(route)
                         }
-                    }
-                )
-            }
+                    )
+                }
 
-            composable(Screen.Home.route) {
-                HomeScreen(
-                    viewModel = viewModel,
-                    userViewModel = userViewModel,
-                    onLogout = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
-                    onNavigate = { route ->
-                        navController.navigate(route)
-                    }
-                )
-            }
+                composable(Screen.Profile.route) {
+                    ProfileScreen(viewModel = viewModel)
+                }
 
-            composable(Screen.Profile.route) {
-                ProfileScreen(viewModel = viewModel)
-            }
+                composable(Screen.UserManagement.route) {
+                    UserManagementScreen(
+                        authViewModel = viewModel,
+                        userViewModel = userViewModel
+                    )
+                }
 
-            composable(Screen.UserManagement.route) {
-                UserManagementScreen(
-                    authViewModel = viewModel,
-                    userViewModel = userViewModel
-                )
-            }
+                composable(Screen.Calendar.route) {
+                    CalendarScreen()
+                }
 
-            composable(Screen.Calendar.route) {
-                CalendarScreen()
-            }
+                composable(Screen.MCSubmission.route) {
+                    MCSubmissionScreen(authViewModel = viewModel)
+                }
 
-            composable(Screen.MCSubmission.route) {
-                MCSubmissionScreen(authViewModel = viewModel)
-            }
+                composable(Screen.Attendance.route) {
+                    AttendanceScreen(authViewModel = viewModel)
+                }
 
-            composable(Screen.Attendance.route) {
-                AttendanceScreen(authViewModel = viewModel)
-            }
+                composable(Screen.FacilityBooking.route) {
+                    FacilityBookingScreen(authViewModel = viewModel)
+                }
 
+                composable(Screen.Messaging.route) {
+                    MessagingScreen(
+                        authViewModel = viewModel,
+                        userViewModel = userViewModel
+                    )
+                }
 
-            composable(Screen.FacilityBooking.route) {
-                FacilityBookingScreen(authViewModel = viewModel)
-            }
+                // Lecturer routes
+                composable(Screen.ClassManagement.route) {
+                    ClassManagementScreen(authViewModel = viewModel)
+                }
 
-            composable(Screen.Messaging.route) {
-                MessagingScreen(
-                    authViewModel = viewModel,
-                    userViewModel = userViewModel
-                )
-            }
+                composable(Screen.Schedule.route) {
+                    ScheduleScreen(authViewModel = viewModel)
+                }
 
-            // Lecturer routes
-            composable(Screen.ClassManagement.route) {
-                ClassManagementScreen(authViewModel = viewModel)
-            }
+                composable(Screen.RoomBooking.route) {
+                    // Reuse FacilityBookingScreen but filter for lecturer rooms
+                    FacilityBookingScreen(authViewModel = viewModel)
+                }
 
-            composable(Screen.Schedule.route) {
-                ScheduleScreen(authViewModel = viewModel)
-            }
+                // Admin routes
+                composable(Screen.ModuleManagement.route) {
+                    ModuleManagementScreen()
+                }
 
-            composable(Screen.RoomBooking.route) {
-                FacilityBookingScreen(authViewModel = viewModel)
-            }
+                composable(Screen.ScheduleOverview.route) {
+                    ScheduleOverviewScreen()
+                }
 
-            // Admin routes
-            composable(Screen.ModuleManagement.route) {
-                ModuleManagementScreen()
-            }
+                composable(Screen.FacilityManagement.route) {
+                    FacilityManagementScreen()
+                }
 
-            composable(Screen.ScheduleOverview.route) {
-                ScheduleOverviewScreen()
-            }
-
-            composable(Screen.FacilityManagement.route) {
-                FacilityManagementScreen()
-            }
-
-            composable(Screen.MCReview.route) {
-                MCReviewScreen(authViewModel = viewModel)
+                composable(Screen.MCReview.route) {
+                    MCReviewScreen(authViewModel = viewModel)
+                }
             }
         }
     }
