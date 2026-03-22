@@ -798,7 +798,9 @@ class MessagingViewModel : ViewModel() {
                                 attachmentUrl = document.getString("attachmentUrl") ?: "",
                                 attachmentName = document.getString("attachmentName") ?: "",
                                 attachmentType = document.getString("attachmentType") ?: "",
-                                isEdited = document.getBoolean("isEdited") ?: false
+                                isEdited = document.getBoolean("isEdited") ?: false,
+                                latitude = document.getDouble("latitude"),
+                                longitude = document.getDouble("longitude")
                             )
                         } catch (e: Exception) {
                             null
@@ -851,6 +853,50 @@ class MessagingViewModel : ViewModel() {
 
     fun resetSendState() {
         _sendMessageState.value = SendMessageState.Idle
+    }
+
+    fun sendLocationMessage(chatRoomId: String, latitude: Double, longitude: Double) {
+        viewModelScope.launch {
+            try {
+                _sendMessageState.value = SendMessageState.Loading
+
+                withTimeout(15000L) {
+                    val messageData = hashMapOf(
+                        "senderId" to currentUserId,
+                        "senderName" to currentUserName,
+                        "content" to "📍 Shared a location",
+                        "attachmentType" to "location",
+                        "attachmentUrl" to "",
+                        "attachmentName" to "",
+                        "latitude" to latitude,
+                        "longitude" to longitude,
+                        "timestamp" to com.google.firebase.Timestamp.now()
+                    )
+
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .collection("messages")
+                        .add(messageData)
+                        .await()
+
+                    firestore.collection("chat_rooms")
+                        .document(chatRoomId)
+                        .update(
+                            mapOf(
+                                "lastMessage" to "📍 Shared a location",
+                                "lastMessageTime" to com.google.firebase.Timestamp.now()
+                            )
+                        )
+                        .await()
+
+                    _sendMessageState.value = SendMessageState.Success
+                }
+            } catch (e: TimeoutCancellationException) {
+                _sendMessageState.value = SendMessageState.Error("Request timed out. Please check your internet connection.")
+            } catch (e: Exception) {
+                _sendMessageState.value = SendMessageState.Error(e.message ?: "Failed to send location")
+            }
+        }
     }
 
     fun sendMessageWithAttachment(

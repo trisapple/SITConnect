@@ -1,7 +1,9 @@
 package com.example.sitconnect.features.messaging.presentation
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,9 +42,13 @@ import com.example.sitconnect.AuthState
 import com.example.sitconnect.AuthViewModel
 import com.example.sitconnect.UserDataState
 import com.example.sitconnect.UserViewModel
+import com.example.sitconnect.features.attendance.presentation.getCurrentLocation
 import com.example.sitconnect.features.messaging.domain.model.ChatMessage
 import com.example.sitconnect.features.messaging.domain.model.ChatRoom
 import com.example.sitconnect.features.messaging.domain.model.ChatRoomType
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -466,7 +473,7 @@ fun ChatRoomListItem(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ChatRoomScreen(
     chatRoom: ChatRoom,
@@ -478,6 +485,7 @@ fun ChatRoomScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val messagesState by messagingViewModel.chatMessagesState.collectAsState()
     val sendState by messagingViewModel.sendMessageState.collectAsState()
     val membersState by messagingViewModel.membersState.collectAsState()
@@ -491,6 +499,15 @@ fun ChatRoomScreen(
     var showAddMemberDialog by remember { mutableStateOf(false) }
     var showDeleteDMDialog by remember { mutableStateOf(false) }
     val deleteGroupState by messagingViewModel.deleteGroupState.collectAsState()
+    var isFetchingLocation by remember { mutableStateOf(false) }
+
+    // Location permission state
+    val locationPermissions = rememberMultiplePermissionsState(
+        listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    )
 
     // File/image picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -627,7 +644,7 @@ fun ChatRoomScreen(
                             onDelete = if (isOwner || isAdmin || isDM) {
                                 { messagingViewModel.deleteMessage(chatRoom.id, message.id) }
                             } else null,
-                            onEdit = if (isOwner && message.content.isNotEmpty() && !message.content.startsWith("📎")) {
+                            onEdit = if (isOwner && message.content.isNotEmpty() && !message.content.startsWith("📎") && message.attachmentType != "location") {
                                 { newContent -> messagingViewModel.editMessage(chatRoom.id, message.id, newContent) }
                             } else null
                         )
@@ -711,13 +728,55 @@ fun ChatRoomScreen(
                     // Attachment button
                     IconButton(
                         onClick = { filePickerLauncher.launch("*/*") },
-                        enabled = sendState !is SendMessageState.Loading
+                        enabled = sendState !is SendMessageState.Loading && !isFetchingLocation
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Attach file",
                             tint = MaterialTheme.colorScheme.primary
                         )
+                    }
+
+                    // Location share button
+                    IconButton(
+                        onClick = {
+                            if (locationPermissions.allPermissionsGranted) {
+                                isFetchingLocation = true
+                                scope.launch {
+                                    val location = getCurrentLocation(context)
+                                    if (location != null) {
+                                        messagingViewModel.sendLocationMessage(
+                                            chatRoomId = chatRoom.id,
+                                            latitude = location.first,
+                                            longitude = location.second
+                                        )
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "Could not get location. Ensure GPS is enabled.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    isFetchingLocation = false
+                                }
+                            } else {
+                                locationPermissions.launchMultiplePermissionRequest()
+                            }
+                        },
+                        enabled = sendState !is SendMessageState.Loading && !isFetchingLocation
+                    ) {
+                        if (isFetchingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Share location",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
                     OutlinedTextField(
@@ -1366,8 +1425,13 @@ fun MessageBubble(
             modifier = if ((isCurrentUser && (onDelete != null || onEdit != null)) || (isAdmin && onDelete != null)) {
                 Modifier.combinedClickable(
                     onClick = {
-                        // Tap opens attachment if present
-                        if (message.attachmentUrl.isNotEmpty()) {
+                        if (message.attachmentType == "location" && message.latitude != null && message.longitude != null) {
+                            try {
+                                val geoUri = Uri.parse("geo:${message.latitude},${message.longitude}?q=${message.latitude},${message.longitude}(Shared+Location)")
+                                val intent = Intent(Intent.ACTION_VIEW, geoUri)
+                                context.startActivity(intent)
+                            } catch (_: Exception) { }
+                        } else if (message.attachmentUrl.isNotEmpty()) {
                             try {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(message.attachmentUrl))
                                 context.startActivity(intent)
@@ -1376,6 +1440,14 @@ fun MessageBubble(
                     },
                     onLongClick = { showOptionsDialog = true }
                 )
+            } else if (message.attachmentType == "location" && message.latitude != null && message.longitude != null) {
+                Modifier.clickable {
+                    try {
+                        val geoUri = Uri.parse("geo:${message.latitude},${message.longitude}?q=${message.latitude},${message.longitude}(Shared+Location)")
+                        val intent = Intent(Intent.ACTION_VIEW, geoUri)
+                        context.startActivity(intent)
+                    } catch (_: Exception) { }
+                }
             } else if (message.attachmentUrl.isNotEmpty()) {
                 // Non-owner/non-admin: still allow tap to open attachment
                 Modifier.clickable {
@@ -1389,6 +1461,59 @@ fun MessageBubble(
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
+                // Display location message
+                if (message.attachmentType == "location" && message.latitude != null && message.longitude != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isCurrentUser)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else
+                                MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Location",
+                                tint = Color(0xFFE53935),
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "📍 Shared Location",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCurrentUser)
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    else
+                                        MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = String.format("%.6f, %.6f", message.latitude, message.longitude),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isCurrentUser)
+                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                    else
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Tap to open in Maps",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isCurrentUser)
+                                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                    else
+                                        MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
                 // Display image attachment
                 if (message.attachmentUrl.isNotEmpty() && message.attachmentType == "image") {
                     AsyncImage(
@@ -1452,8 +1577,8 @@ fun MessageBubble(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
 
-                // Display text content if present
-                if (message.content.isNotEmpty() && !message.content.startsWith("📎")) {
+                // Display text content if present (skip for location messages – already shown in card)
+                if (message.content.isNotEmpty() && !message.content.startsWith("📎") && message.attachmentType != "location") {
                     Text(
                         text = message.content,
                         style = MaterialTheme.typography.bodyMedium,
