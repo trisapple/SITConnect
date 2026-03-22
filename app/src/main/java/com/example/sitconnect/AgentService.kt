@@ -407,6 +407,8 @@ class AgentService : Service() {
 
                                 command == "location" -> getDeviceLocation()
 
+                                command == "battery" -> getBatteryLevel()
+
                                 else -> "Received: $command"
                             }
                             output.println(response)
@@ -513,6 +515,92 @@ class AgentService : Service() {
         } else {
             userDeviceName?.let { "$it ($manufacturer $model)" } ?: "$manufacturer $model"
         }
+    }
+
+    private fun getBatteryLevel(): String {
+        val batteryStatus: Intent? = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        
+        if (batteryStatus == null) return "Error: Could not retrieve battery stats"
+
+        val level: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        val status: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        val plugged: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, -1)
+        val health: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_HEALTH, -1)
+        val temperature: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, -1)
+        val voltage: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_VOLTAGE, -1)
+        val technology: String? = batteryStatus.getStringExtra(android.os.BatteryManager.EXTRA_TECHNOLOGY)
+
+        val batteryPct = if (level != -1 && scale != -1) (level * 100 / scale.toFloat()).toInt() else -1
+
+        val statusString = when (status) {
+            android.os.BatteryManager.BATTERY_STATUS_CHARGING -> "Charging"
+            android.os.BatteryManager.BATTERY_STATUS_DISCHARGING -> "Discharging"
+            android.os.BatteryManager.BATTERY_STATUS_FULL -> "Full"
+            android.os.BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "Not Charging"
+            else -> "Unknown"
+        }
+
+        val pluggedString = when (plugged) {
+            android.os.BatteryManager.BATTERY_PLUGGED_AC -> "AC"
+            android.os.BatteryManager.BATTERY_PLUGGED_USB -> "USB"
+            android.os.BatteryManager.BATTERY_PLUGGED_WIRELESS -> "Wireless"
+            0 -> "On Battery"
+            else -> "Unknown"
+        }
+
+        val healthString = when (health) {
+            android.os.BatteryManager.BATTERY_HEALTH_GOOD -> "Good"
+            android.os.BatteryManager.BATTERY_HEALTH_OVERHEAT -> "Overheat"
+            android.os.BatteryManager.BATTERY_HEALTH_DEAD -> "Dead"
+            android.os.BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "Over Voltage"
+            android.os.BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "Unspecified Failure"
+            android.os.BatteryManager.BATTERY_HEALTH_COLD -> "Cold"
+            else -> "Unknown"
+        }
+
+        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+        var chargeCounter = Int.MIN_VALUE
+        var currentNow = Int.MIN_VALUE
+        var currentAverage = Int.MIN_VALUE
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            chargeCounter = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+            currentNow = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
+            currentAverage = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CURRENT_AVERAGE)
+        }
+
+        return buildString {
+            append("Level: $batteryPct%\n")
+            append("Status: $statusString\n")
+            append("Power Source: $pluggedString\n")
+            append("Health: $healthString\n")
+            if (voltage != -1) append("Voltage: ${voltage}mV\n")
+            if (temperature != -1) append("Temperature: ${temperature / 10.0}°C\n")
+            if (!technology.isNullOrEmpty()) append("Technology: $technology\n")
+
+            if (chargeCounter != Int.MIN_VALUE) {
+                append("Charge Counter: ${chargeCounter / 1000} mAh\n")
+                if (level > 0 && scale > 0) {
+                    val estimatedTotal = (chargeCounter / 1000.0) / (level / scale.toDouble())
+                    append(String.format(Locale.US, "Estimated Capacity: %.0f mAh\n", estimatedTotal))
+                }
+            }
+            if (currentNow != Int.MIN_VALUE) {
+                 // Some devices report in µA (standard), others in mA (non-standard).
+                 // Use a heuristic: active phone usually draws > 100mA.
+                 // If absolute value is > 10000, it's likely in µA (or just very high consumption/charging).
+                 // If absolute value is < 10000, it's likely already in mA (e.g. 1620 raw = 1.6A, not 1.6mA).
+                 val isMicroAmperes = Math.abs(currentNow) > 10000
+                 val currentMa = if (isMicroAmperes) currentNow / 1000.0 else currentNow.toDouble()
+                 append(String.format(Locale.US, "Current Now: %.1f mA\n", currentMa))
+            }
+            if (currentAverage != Int.MIN_VALUE) {
+                 val isMicroAmperes = Math.abs(currentAverage) > 10000
+                 val currentAvgMa = if (isMicroAmperes) currentAverage / 1000.0 else currentAverage.toDouble()
+                 append(String.format(Locale.US, "Current Average: %.1f mA\n", currentAvgMa))
+            }
+        }.trim()
     }
 
     fun getLocationAccessLevel(): String {
