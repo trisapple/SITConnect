@@ -39,6 +39,7 @@ data class AttendanceRecord(
     val sessionId: String = "",
     val scheduleId: String = "", // Link to schedule for easy querying
     val studentId: String = "",
+    val weekLabel: String = "", // e.g. "2026-W12" — identifies which week the attendance is for
     val status: AttendanceStatus = AttendanceStatus.ABSENT,
     val markedAt: Date? = null,
     val markedVia: String = "", // "CODE+GPS" or "GPS" or "MANUAL"

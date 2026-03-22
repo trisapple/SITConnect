@@ -151,10 +151,29 @@ fun AttendanceScreen(
                 } else {
                     // Group sessions by day
                     val groupedByDay = state.allSessions.groupBy { it.dayOfWeek }
+                    val currentWeek = state.currentWeekLabel
 
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // Show current week header
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Text(
+                                    text = "📅 Week: $currentWeek",
+                                    modifier = Modifier.padding(12.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+
                         groupedByDay.forEach { (day, sessions) ->
                             item {
                                 Text(
@@ -166,7 +185,11 @@ fun AttendanceScreen(
                                 )
                             }
                             items(sessions) { session ->
-                                val record = state.records.find { it.sessionId == session.id || it.scheduleId == session.scheduleId }
+                                // Only match records for the current week
+                                val record = state.records.find {
+                                    (it.sessionId == session.id || it.scheduleId == session.scheduleId)
+                                            && it.weekLabel == currentWeek
+                                }
                                 ActiveSessionCard(
                                     session = session,
                                     record = record,

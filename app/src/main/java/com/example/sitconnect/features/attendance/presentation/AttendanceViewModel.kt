@@ -17,7 +17,8 @@ sealed class AttendanceState {
     data class Success(
         val allSessions: List<AttendanceSession>, // All sessions grouped by day
         val records: List<AttendanceRecord>,
-        val summaries: List<StudentAttendanceSummary>
+        val summaries: List<StudentAttendanceSummary>,
+        val currentWeekLabel: String = ""
     ) : AttendanceState()
     data class Error(val message: String) : AttendanceState()
 }
@@ -39,6 +40,21 @@ class AttendanceViewModel : ViewModel() {
     val markAttendanceState: StateFlow<MarkAttendanceState> = _markAttendanceState
 
     private var currentStudentId: String = ""
+
+    /**
+     * Returns the ISO week label for the given date, e.g. "2026-W12".
+     * Weeks start on Monday (ISO standard).
+     */
+    private fun getWeekLabel(date: Date = Date()): String {
+        val cal = Calendar.getInstance().apply {
+            time = date
+            firstDayOfWeek = Calendar.MONDAY
+            minimalDaysInFirstWeek = 4 // ISO 8601
+        }
+        val year = cal.get(Calendar.YEAR)
+        val week = cal.get(Calendar.WEEK_OF_YEAR)
+        return String.format("%d-W%02d", year, week)
+    }
 
     fun fetchAttendance(studentId: String) {
         currentStudentId = studentId
@@ -99,6 +115,7 @@ class AttendanceViewModel : ViewModel() {
                             sessionId = document.getString("sessionId") ?: "",
                             scheduleId = document.getString("scheduleId") ?: "",
                             studentId = document.getString("studentId") ?: "",
+                            weekLabel = document.getString("weekLabel") ?: "",
                             status = AttendanceStatus.valueOf(document.getString("status") ?: "ABSENT"),
                             markedAt = document.getTimestamp("markedAt")?.toDate(),
                             markedVia = document.getString("markedVia") ?: "",
@@ -110,12 +127,14 @@ class AttendanceViewModel : ViewModel() {
                     }
                 }
 
+                val currentWeek = getWeekLabel()
                 val summaries = calculateSummaries(allSessions, records)
 
                 _attendanceState.value = AttendanceState.Success(
                     allSessions = allSessions,
                     records = records,
-                    summaries = summaries
+                    summaries = summaries,
+                    currentWeekLabel = currentWeek
                 )
             } catch (e: Exception) {
                 _attendanceState.value = AttendanceState.Error(e.message ?: "Failed to fetch attendance")
@@ -161,11 +180,27 @@ class AttendanceViewModel : ViewModel() {
                         return@launch
                     }
 
-                    // Mark attendance
+                    // Mark attendance with current week label
+                    val currentWeek = getWeekLabel()
+
+                    // Check for duplicate: prevent marking twice in the same week
+                    val existingRecord = firestore.collection("attendance_records")
+                        .whereEqualTo("studentId", currentStudentId)
+                        .whereEqualTo("scheduleId", session.scheduleId)
+                        .whereEqualTo("weekLabel", currentWeek)
+                        .get()
+                        .await()
+
+                    if (!existingRecord.isEmpty) {
+                        _markAttendanceState.value = MarkAttendanceState.Error("Attendance already marked for this session this week")
+                        return@launch
+                    }
+
                     val recordData = hashMapOf(
                         "sessionId" to sessionId,
                         "scheduleId" to session.scheduleId,
                         "studentId" to currentStudentId,
+                        "weekLabel" to currentWeek,
                         "status" to AttendanceStatus.PRESENT.name,
                         "markedAt" to com.google.firebase.Timestamp.now(),
                         "markedVia" to "CODE+GPS",

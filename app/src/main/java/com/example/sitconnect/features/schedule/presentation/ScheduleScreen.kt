@@ -199,6 +199,7 @@ fun ScheduleScreen(
         AttendanceRecordsDialog(
             entry = entry,
             attendanceRecordsState = attendanceRecordsState,
+            onSelectWeek = { week -> scheduleViewModel.selectWeek(week) },
             onDismiss = {
                 showAttendanceRecordsDialog = null
                 scheduleViewModel.clearAttendanceRecords()
@@ -524,8 +525,11 @@ fun AttendanceCodeDialog(
 fun AttendanceRecordsDialog(
     entry: ScheduleEntry,
     attendanceRecordsState: AttendanceRecordsState,
+    onSelectWeek: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var showWeekDropdown by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -536,6 +540,95 @@ fun AttendanceRecordsDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Week selector
+                if (attendanceRecordsState is AttendanceRecordsState.Success) {
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box {
+                        Surface(
+                            onClick = { showWeekDropdown = true },
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "📅 ${attendanceRecordsState.weekLabel}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                if (attendanceRecordsState.availableWeeks.size > 1) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "▼",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showWeekDropdown,
+                            onDismissRequest = { showWeekDropdown = false }
+                        ) {
+                            attendanceRecordsState.availableWeeks.forEach { week ->
+                                val isSelected = week == attendanceRecordsState.weekLabel
+                                // Determine if this is the current calendar week
+                                val cal = java.util.Calendar.getInstance().apply {
+                                    firstDayOfWeek = java.util.Calendar.MONDAY
+                                    minimalDaysInFirstWeek = 4
+                                }
+                                val currentWeekStr = String.format(
+                                    "%d-W%02d",
+                                    cal.get(java.util.Calendar.YEAR),
+                                    cal.get(java.util.Calendar.WEEK_OF_YEAR)
+                                )
+                                val isCurrentWeek = week == currentWeekStr
+
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = week,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            if (isCurrentWeek) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
+                                                    color = Color(0xFF4CAF50).copy(alpha = 0.2f),
+                                                    shape = MaterialTheme.shapes.small
+                                                ) {
+                                                    Text(
+                                                        text = "Current",
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFF4CAF50),
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        onSelectWeek(week)
+                                        showWeekDropdown = false
+                                    },
+                                    leadingIcon = {
+                                        if (isSelected) {
+                                            Text("✓", color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         text = {
@@ -644,10 +737,19 @@ fun AttendanceRecordsDialog(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 if (student.isPresent && student.markedAt != null) {
+                                                    val dateTimeFormat = java.text.SimpleDateFormat(
+                                                        "dd MMM yyyy, HH:mm", java.util.Locale.getDefault()
+                                                    )
                                                     Text(
-                                                        text = "Marked at ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(student.markedAt)} via ${student.markedVia}",
+                                                        text = "✓ ${dateTimeFormat.format(student.markedAt)} via ${student.markedVia}",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = Color(0xFF4CAF50)
+                                                    )
+                                                } else if (!student.isPresent) {
+                                                    Text(
+                                                        text = "Not marked this week",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = Color(0xFFF44336)
                                                     )
                                                 }
                                             }

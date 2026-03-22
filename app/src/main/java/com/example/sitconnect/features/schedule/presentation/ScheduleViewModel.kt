@@ -13,6 +13,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlin.random.Random
 
+import java.util.*
+
 sealed class ScheduleState {
     object Idle : ScheduleState()
     object Loading : ScheduleState()
@@ -206,50 +208,79 @@ class ScheduleViewModel : ViewModel() {
     private val _attendanceRecordsState = MutableStateFlow<AttendanceRecordsState>(AttendanceRecordsState.Idle)
     val attendanceRecordsState: StateFlow<AttendanceRecordsState> = _attendanceRecordsState
 
+    // Cache for grouped records so we don't re-fetch when switching weeks
+    private var cachedWeeklyRecords: Map<String, List<WeeklyRecord>> = emptyMap()
+    private var cachedStudentDetails: Map<String, Pair<String, String>> = emptyMap() // uid -> (name, email)
+    private var cachedEnrolledStudents: List<String> = emptyList()
+
     fun fetchAttendanceRecords(scheduleId: String, enrolledStudents: List<String>) {
         viewModelScope.launch {
             try {
                 _attendanceRecordsState.value = AttendanceRecordsState.Loading
 
-                // Fetch attendance records for this schedule
+                val currentWeek = getWeekLabel()
+
+                // Fetch ALL attendance records for this schedule (all weeks)
                 val recordsSnapshot = firestore.collection("attendance_records")
                     .whereEqualTo("scheduleId", scheduleId)
                     .get()
                     .await()
 
-                val presentStudentIds = recordsSnapshot.documents.mapNotNull { it.getString("studentId") }.toSet()
+                // Parse records with their weekLabel
+                val allRecords = recordsSnapshot.documents.mapNotNull { doc ->
+                    try {
+                        WeeklyRecord(
+                            studentId = doc.getString("studentId") ?: "",
+                            weekLabel = doc.getString("weekLabel") ?: "",
+                            markedAt = doc.getTimestamp("markedAt")?.toDate(),
+                            markedVia = doc.getString("markedVia") ?: ""
+                        )
+                    } catch (e: Exception) { null }
+                }
 
-                // Fetch all enrolled students' details
-                val attendanceList = mutableListOf<StudentAttendanceInfo>()
+                // Group by weekLabel
+                cachedWeeklyRecords = allRecords.groupBy { it.weekLabel }
+                cachedEnrolledStudents = enrolledStudents
+
+                // Fetch all enrolled students' details and cache them
+                val studentDetails = mutableMapOf<String, Pair<String, String>>()
                 for (studentUid in enrolledStudents) {
                     try {
                         val userDoc = firestore.collection("users")
                             .document(studentUid)
                             .get()
                             .await()
-
                         if (userDoc.exists()) {
-                            val record = recordsSnapshot.documents.find { it.getString("studentId") == studentUid }
-                            attendanceList.add(
-                                StudentAttendanceInfo(
-                                    studentId = studentUid,
-                                    studentName = userDoc.getString("name") ?: "",
-                                    studentEmail = userDoc.getString("email") ?: "",
-                                    isPresent = presentStudentIds.contains(studentUid),
-                                    markedAt = record?.getTimestamp("markedAt")?.toDate(),
-                                    markedVia = record?.getString("markedVia") ?: ""
-                                )
+                            studentDetails[studentUid] = Pair(
+                                userDoc.getString("name") ?: "",
+                                userDoc.getString("email") ?: ""
                             )
                         }
                     } catch (e: Exception) {
                         // Skip this student
                     }
                 }
+                cachedStudentDetails = studentDetails
+
+                // Get all available weeks sorted descending (newest first)
+                val availableWeeks = cachedWeeklyRecords.keys
+                    .filter { it.isNotEmpty() }
+                    .sortedDescending()
+
+                // Build attendance list for the current week (or first available)
+                val selectedWeek = if (availableWeeks.contains(currentWeek)) currentWeek
+                    else if (availableWeeks.isNotEmpty()) availableWeeks.first()
+                    else currentWeek
+
+                val attendanceList = buildAttendanceListForWeek(selectedWeek)
 
                 _attendanceRecordsState.value = AttendanceRecordsState.Success(
-                    records = attendanceList.sortedBy { it.studentName },
-                    presentCount = presentStudentIds.size,
-                    totalCount = enrolledStudents.size
+                    records = attendanceList,
+                    presentCount = attendanceList.count { it.isPresent },
+                    totalCount = enrolledStudents.size,
+                    weekLabel = selectedWeek,
+                    availableWeeks = if (availableWeeks.contains(currentWeek)) availableWeeks
+                        else (listOf(currentWeek) + availableWeeks).sortedDescending()
                 )
             } catch (e: Exception) {
                 _attendanceRecordsState.value = AttendanceRecordsState.Error(e.message ?: "Failed to fetch attendance records")
@@ -257,10 +288,67 @@ class ScheduleViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Switch to a different week's attendance view without re-fetching from Firestore.
+     */
+    fun selectWeek(weekLabel: String) {
+        val currentState = _attendanceRecordsState.value
+        if (currentState is AttendanceRecordsState.Success) {
+            val attendanceList = buildAttendanceListForWeek(weekLabel)
+            _attendanceRecordsState.value = currentState.copy(
+                records = attendanceList,
+                presentCount = attendanceList.count { it.isPresent },
+                weekLabel = weekLabel
+            )
+        }
+    }
+
+    private fun buildAttendanceListForWeek(weekLabel: String): List<StudentAttendanceInfo> {
+        val weekRecords = cachedWeeklyRecords[weekLabel] ?: emptyList()
+        val presentStudentIds = weekRecords.map { it.studentId }.toSet()
+
+        return cachedEnrolledStudents.mapNotNull { studentUid ->
+            val details = cachedStudentDetails[studentUid] ?: return@mapNotNull null
+            val record = weekRecords.find { it.studentId == studentUid }
+            StudentAttendanceInfo(
+                studentId = studentUid,
+                studentName = details.first,
+                studentEmail = details.second,
+                isPresent = presentStudentIds.contains(studentUid),
+                markedAt = record?.markedAt,
+                markedVia = record?.markedVia ?: ""
+            )
+        }.sortedBy { it.studentName }
+    }
+
     fun clearAttendanceRecords() {
         _attendanceRecordsState.value = AttendanceRecordsState.Idle
+        cachedWeeklyRecords = emptyMap()
+        cachedStudentDetails = emptyMap()
+        cachedEnrolledStudents = emptyList()
+    }
+
+    /**
+     * Returns the ISO week label for the given date, e.g. "2026-W12".
+     */
+    private fun getWeekLabel(date: Date = Date()): String {
+        val cal = Calendar.getInstance().apply {
+            time = date
+            firstDayOfWeek = Calendar.MONDAY
+            minimalDaysInFirstWeek = 4 // ISO 8601
+        }
+        val year = cal.get(Calendar.YEAR)
+        val week = cal.get(Calendar.WEEK_OF_YEAR)
+        return String.format("%d-W%02d", year, week)
     }
 }
+
+data class WeeklyRecord(
+    val studentId: String,
+    val weekLabel: String,
+    val markedAt: java.util.Date?,
+    val markedVia: String
+)
 
 sealed class AttendanceRecordsState {
     object Idle : AttendanceRecordsState()
@@ -268,7 +356,9 @@ sealed class AttendanceRecordsState {
     data class Success(
         val records: List<StudentAttendanceInfo>,
         val presentCount: Int,
-        val totalCount: Int
+        val totalCount: Int,
+        val weekLabel: String = "",
+        val availableWeeks: List<String> = emptyList()
     ) : AttendanceRecordsState()
     data class Error(val message: String) : AttendanceRecordsState()
 }
