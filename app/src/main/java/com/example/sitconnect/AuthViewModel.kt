@@ -20,6 +20,7 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.Manifest
 import android.os.Build
+import com.google.firebase.functions.FirebaseFunctions
 
 
 
@@ -40,6 +41,7 @@ sealed class EmailActionState {
 class AuthViewModel : ViewModel() {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val functions: FirebaseFunctions = FirebaseFunctions.getInstance()
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
@@ -131,7 +133,11 @@ class AuthViewModel : ViewModel() {
             try {
                 _emailActionState.value = EmailActionState.Loading
                 withTimeout(15000L) {
-                    auth.sendPasswordResetEmail(email).await()
+                    // Call Cloud Function – faster & lands in inbox, not junk
+                    functions
+                        .getHttpsCallable("sendPasswordResetSelf")
+                        .call(hashMapOf("email" to email))
+                        .await()
                     _emailActionState.value = EmailActionState.Success("Password reset email sent to $email")
                 }
             } catch (e: TimeoutCancellationException) {
@@ -147,7 +153,11 @@ class AuthViewModel : ViewModel() {
             try {
                 _emailActionState.value = EmailActionState.Loading
                 withTimeout(15000L) {
-                    auth.currentUser?.sendEmailVerification()?.await()
+                    // Call Cloud Function – faster & lands in inbox, not junk
+                    functions
+                        .getHttpsCallable("sendVerificationEmail")
+                        .call(null)
+                        .await()
                     _emailActionState.value = EmailActionState.Success("Verification email sent. Please check your inbox.")
                 }
             } catch (e: TimeoutCancellationException) {
@@ -160,6 +170,24 @@ class AuthViewModel : ViewModel() {
 
     fun resetEmailActionState() {
         _emailActionState.value = EmailActionState.Idle
+    }
+
+    /**
+     * Reload the current FirebaseUser from the server so that cached fields
+     * like isEmailVerified are refreshed without requiring a logout/login.
+     */
+    fun reloadUser() {
+        viewModelScope.launch {
+            try {
+                auth.currentUser?.let { user ->
+                    user.reload().await()
+                    // Re-emit the (now-refreshed) user object so the UI recomposes
+                    _authState.value = AuthState.Success(auth.currentUser)
+                }
+            } catch (e: Exception) {
+                Log.e("AuthViewModel", "Failed to reload user: ${e.message}")
+            }
+        }
     }
 
     fun logout() {

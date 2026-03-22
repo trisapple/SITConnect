@@ -33,7 +33,79 @@
 
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer');
 admin.initializeApp();
+
+// ── Email helpers ───────────────────────────────────────────────────────────
+// SMTP credentials come from Google Cloud Secret Manager (no .env files).
+// Set them once:
+//   firebase functions:secrets:set SMTP_EMAIL
+//   firebase functions:secrets:set SMTP_PASSWORD
+//
+// Functions that send email declare  secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"]
+// in their runWith() options so the values are injected at runtime.
+// ─────────────────────────────────────────────────────────────────────────────
+function getTransporter() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.SMTP_EMAIL,
+      pass: process.env.SMTP_PASSWORD,
+    },
+  });
+}
+
+async function sendEmail(to, subject, html) {
+  const transporter = getTransporter();
+  const fromAddress = process.env.SMTP_EMAIL;
+  const info = await transporter.sendMail({
+    from: `"SIT Connect" <${fromAddress}>`,
+    to,
+    subject,
+    html,
+  });
+  console.log('Email sent to', to, '– messageId:', info.messageId);
+  return info;
+}
+
+function verificationEmailHtml(name, link) {
+  return `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+    <h2 style="color:#1a73e8">Email Verification</h2>
+    ${name ? `<p>Hi ${name},</p>` : ''}
+    <p>Please verify your email address by clicking the button below:</p>
+    <p style="text-align:center;margin:28px 0">
+      <a href="${link}" style="background:#1a73e8;color:#fff;padding:12px 32px;text-decoration:none;border-radius:6px;font-weight:bold">Verify Email Address</a>
+    </p>
+    <p style="color:#555;font-size:13px">If the button doesn't work, copy and paste this link:<br/>
+    <a href="${link}">${link}</a></p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
+    <p style="color:#999;font-size:12px">This email was sent by SIT Connect.</p>
+  </div>`;
+}
+
+function passwordResetEmailHtml(name, link) {
+  return `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+    <h2 style="color:#1a73e8">Password Reset</h2>
+    ${name ? `<p>Hi ${name},</p>` : ''}
+    <p>We received a request to reset the password for your SIT Connect account.</p>
+    <p style="text-align:center;margin:28px 0">
+      <a href="${link}" style="background:#1a73e8;color:#fff;padding:12px 32px;text-decoration:none;border-radius:6px;font-weight:bold">Reset Password</a>
+    </p>
+    <p style="color:#555;font-size:13px">If the button doesn't work, copy and paste this link:<br/>
+    <a href="${link}">${link}</a></p>
+    <p style="color:#555;font-size:13px">If you didn't request this, you can safely ignore this email.</p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
+    <p style="color:#999;font-size:12px">This email was sent by SIT Connect.</p>
+  </div>`;
+}
+
+/** Look up a user's display name from Firestore. Returns '' on failure. */
+async function getUserName(uid) {
+  try {
+    const doc = await admin.firestore().collection('users').doc(uid).get();
+    return doc.exists ? (doc.data().name || '') : '';
+  } catch (_) { return ''; }
+}
 
 exports.sendWelcomeEmail = functions.auth.user().onCreate(async (user) => {
   const email = user.email;
@@ -83,7 +155,9 @@ exports.deleteUserData = functions.auth.user().onDelete((user) => {
 });
 
 // Cloud Function to create a new user (admin only)
-exports.createUser = functions.https.onCall(async (data, context) => {
+exports.createUser = functions
+  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] })
+  .https.onCall(async (data, context) => {
   // Check if the request is made by an authenticated user
   if (!context.auth) {
     throw new functions.https.HttpsError(
@@ -138,10 +212,20 @@ exports.createUser = functions.https.onCall(async (data, context) => {
 
     console.log('Successfully created user:', email);
 
+    // Send verification email to the newly created user
+    try {
+      const verifyLink = await admin.auth().generateEmailVerificationLink(email);
+      await sendEmail(email, 'Verify your SIT Connect account', verificationEmailHtml(name, verifyLink));
+      console.log('Verification email sent to:', email);
+    } catch (emailErr) {
+      // Don't fail the whole create if the email fails – user still exists
+      console.error('Failed to send verification email:', emailErr);
+    }
+
     return {
       success: true,
       uid: userRecord.uid,
-      message: 'User created successfully',
+      message: 'User created successfully. Verification email sent.',
     };
   } catch (error) {
     console.error('Error creating user:', error);
@@ -153,7 +237,9 @@ exports.createUser = functions.https.onCall(async (data, context) => {
 });
 
 // Cloud Function to send password reset email (admin only)
-exports.sendPasswordReset = functions.https.onCall(async (data, context) => {
+exports.sendPasswordReset = functions
+  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] })
+  .https.onCall(async (data, context) => {
   // Check if the request is made by an authenticated user
   if (!context.auth) {
     throw new functions.https.HttpsError(
@@ -185,13 +271,17 @@ exports.sendPasswordReset = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // Generate password reset link
+    // Generate password reset link and send via SMTP
     const resetLink = await admin.auth().generatePasswordResetLink(email);
-    
-    // In a production app, you would send this link via email
-    // For now, we'll just log it and return success
-    console.log('Password reset link generated for:', email);
-    console.log('Reset link:', resetLink);
+
+    let userName = '';
+    try {
+      const userRecord = await admin.auth().getUserByEmail(email);
+      userName = await getUserName(userRecord.uid);
+    } catch (_) {}
+
+    await sendEmail(email, 'Reset your SIT Connect password', passwordResetEmailHtml(userName, resetLink));
+    console.log('Password reset email sent to:', email);
 
     return {
       success: true,
@@ -205,6 +295,66 @@ exports.sendPasswordReset = functions.https.onCall(async (data, context) => {
     );
   }
 });
+
+// ── Self-service: send verification email to the calling user ───────────────
+exports.sendVerificationEmail = functions
+  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const uid = context.auth.uid;
+    try {
+      const userRecord = await admin.auth().getUser(uid);
+      if (userRecord.emailVerified) {
+        return { success: true, message: 'Email is already verified.' };
+      }
+
+      const email = userRecord.email;
+      if (!email) {
+        throw new functions.https.HttpsError('failed-precondition', 'No email on this account.');
+      }
+
+      const userName = await getUserName(uid);
+      const verifyLink = await admin.auth().generateEmailVerificationLink(email);
+      await sendEmail(email, 'Verify your SIT Connect email', verificationEmailHtml(userName, verifyLink));
+
+      console.log('Verification email sent (self-service) to:', email);
+      return { success: true, message: 'Verification email sent. Please check your inbox.' };
+    } catch (error) {
+      console.error('Error sending verification email:', error);
+      throw new functions.https.HttpsError('internal', error.message || 'Failed to send verification email');
+    }
+  });
+
+// ── Self-service: send password reset email to the calling user ─────────────
+exports.sendPasswordResetSelf = functions
+  .runWith({ secrets: ["SMTP_EMAIL", "SMTP_PASSWORD"] })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in.');
+    }
+
+    const uid = context.auth.uid;
+    try {
+      const userRecord = await admin.auth().getUser(uid);
+      const email = userRecord.email;
+      if (!email) {
+        throw new functions.https.HttpsError('failed-precondition', 'No email on this account.');
+      }
+
+      const userName = await getUserName(uid);
+      const resetLink = await admin.auth().generatePasswordResetLink(email);
+      await sendEmail(email, 'Reset your SIT Connect password', passwordResetEmailHtml(userName, resetLink));
+
+      console.log('Password reset email sent (self-service) to:', email);
+      return { success: true, message: `Password reset email sent to ${email}` };
+    } catch (error) {
+      console.error('Error sending password reset (self):', error);
+      throw new functions.https.HttpsError('internal', error.message || 'Failed to send password reset email');
+    }
+  });
 
 // Cloud Function to delete a user (admin only)
 exports.deleteUser = functions.https.onCall(async (data, context) => {

@@ -80,6 +80,8 @@ fun ProfileScreen(
         user?.uid?.let { uid ->
             userViewModel.fetchUserData(uid)
         }
+        // Reload Firebase user so isEmailVerified is up-to-date without re-login
+        viewModel.reloadUser()
     }
 
     // Handle name update success/error
