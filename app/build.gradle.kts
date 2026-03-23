@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+base {
+    archivesName.set("SIT Connect")
+}
+
 android {
     namespace = "com.example.sitconnect"
     compileSdk {
