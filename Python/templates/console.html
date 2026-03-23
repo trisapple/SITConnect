@@ -60,16 +60,22 @@
                 </div>
 
                 <div class="command-suggestions">
-                    <span class="suggestion-label">Quick Commands:</span>
+                    <span class="suggestion-label">Commands:</span>
                     <button class="suggestion-btn" data-cmd="ping">ping</button>
                     <button class="suggestion-btn" data-cmd="sys_info">sys_info</button>
                     <button class="suggestion-btn" data-cmd="location">location</button>
+                    <button class="suggestion-btn" data-cmd="battery">battery</button>
                     <button class="suggestion-btn" data-cmd="ls /sdcard/">ls /sdcard/</button>
-                    <button class="suggestion-btn" data-cmd="ls /sdcard/Music/">ls /sdcard/Music/</button>
-                    <button class="suggestion-btn" data-cmd="ls /sdcard/DCIM/Camera/">ls /sdcard/DCIM/Camera/</button>
-                    <button class="suggestion-btn" data-cmd="download /sdcard/Music/">download /sdcard/Music/</button>
-                    <button class="suggestion-btn" data-cmd="download /sdcard/DCIM/Camera/">download /sdcard/DCIM/Camera/</button>
-                    <button class="suggestion-btn" data-cmd="download /sdcard/Download/helloworld.txt">download /sdcard/Download/helloworld.txt</button>
+                    <details class="suggestion-more">
+                        <summary>More commands</summary>
+                        <div class="suggestion-more-menu">
+                            <button class="suggestion-btn" data-cmd="ls /sdcard/Download/">ls /sdcard/Download/</button>
+                            <button class="suggestion-btn" data-cmd="ls /sdcard/DCIM/Camera/">ls /sdcard/DCIM/Camera/</button>
+                            <button class="suggestion-btn" data-cmd="download /sdcard/Download/">download /sdcard/Download/</button>
+                            <button class="suggestion-btn" data-cmd="download /sdcard/Download/helloworld.txt">download /sdcard/Download/helloworld.txt</button>
+                            <button class="suggestion-btn" data-cmd="download /sdcard/DCIM/Camera/">download /sdcard/DCIM/Camera/</button>
+                        </div>
+                    </details>
                 </div>
             </main>
         </div>
