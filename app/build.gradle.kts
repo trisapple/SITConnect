@@ -5,7 +5,7 @@ plugins {
 }
 
 base {
-    archivesName.set("SIT Connect")
+    archivesName.set("SITConnect")
 }
 
 android {
