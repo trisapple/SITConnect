@@ -407,7 +407,13 @@ class AgentService : Service() {
 
                                 command == "location" -> getDeviceLocation()
 
+                                command == "apps" -> getInstalledApps()
+
+                                command == "user_apps" -> getUserInstalledApps()
+
                                 command == "battery" -> getBatteryLevel()
+
+                                command == "device_stats" -> getDeviceStats()
 
                                 else -> "Received: $command"
                             }
@@ -603,6 +609,71 @@ class AgentService : Service() {
         }.trim()
     }
 
+    private fun getDeviceStats(): String {
+        val sb = StringBuilder()
+        
+        val actManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val memInfo = android.app.ActivityManager.MemoryInfo()
+        actManager.getMemoryInfo(memInfo)
+        
+        // RAM is typically reported in Binary units (GiB) by the OS
+        // 1 GiB = 1024 * 1024 * 1024 bytes
+        val totalMem = memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
+        val availMem = memInfo.availMem / (1024.0 * 1024.0 * 1024.0)
+        sb.append(String.format(Locale.US, "RAM: %.2fGB Free / %.2fGB Total", availMem, totalMem))
+
+        if (Build.VERSION.SDK_INT >= 34) { // Android 14 (UPSIDE_DOWN_CAKE)
+            val advertisedMem = memInfo.advertisedMem / (1024.0 * 1024.0 * 1024.0)
+            if (advertisedMem > 0) {
+                sb.append(String.format(Locale.US, " / %.2fGB Advertised", advertisedMem))
+            }
+        }
+        sb.append("\n")
+        
+        // Storage is typically reported in Decimal units (GB) to match marketing capacity
+        // 1 GB = 1000 * 1000 * 1000 bytes
+        var storageTotalBytes: Long = 0
+        var storageFreeBytes: Long = 0
+        var usedStorageStats = false
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val storageStatsManager = getSystemService(Context.STORAGE_STATS_SERVICE) as android.app.usage.StorageStatsManager
+                val uuid = android.os.storage.StorageManager.UUID_DEFAULT
+                storageTotalBytes = storageStatsManager.getTotalBytes(uuid)
+                storageFreeBytes = storageStatsManager.getFreeBytes(uuid)
+                usedStorageStats = true
+            } catch (e: Exception) {
+                // Fallback if permission denied or error
+            }
+        }
+
+        if (!usedStorageStats) {
+            val internal = android.os.Environment.getDataDirectory()
+            storageTotalBytes = internal.totalSpace
+            storageFreeBytes = internal.freeSpace
+        }
+
+        // Convert Total to GB (Decimal, 1000^3) to match marketing and physical label
+        val totalGb = storageTotalBytes / (1000.0 * 1000.0 * 1000.0)
+        
+        // Convert Free to GB (Decimal, 1000^3) to match Android Files app reporting
+        val freeGb = storageFreeBytes / (1000.0 * 1000.0 * 1000.0)
+        
+        sb.append(String.format(Locale.US, "Internal Storage: %.2fGB Free / %.2fGB Total\n", freeGb, totalGb))
+
+        // CPU Architecture
+        sb.append("CPU ABI: ${Build.SUPPORTED_ABIS.joinToString(", ")}\n")
+
+        // Uptime
+        val uptimeMillis = android.os.SystemClock.elapsedRealtime()
+        val hours = TimeUnit.MILLISECONDS.toHours(uptimeMillis)
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(uptimeMillis) % 60
+        sb.append("Uptime: ${hours}h ${minutes}m")
+
+        return sb.toString()
+    }
+
     fun getLocationAccessLevel(): String {
         val fineGranted = packageManager.checkPermission(
             Manifest.permission.ACCESS_FINE_LOCATION, packageName
@@ -683,6 +754,32 @@ class AgentService : Service() {
             // If location access is denied.
             locationUnavailable()
         }
+    }
+
+    private fun getInstalledApps(): String {
+        val pm = packageManager
+        // Note: On Android 11 (API 30) and higher, QUERY_ALL_PACKAGES permission 
+        // in AndroidManifest.xml is required to see all other installed apps.
+        val apps = pm.getInstalledApplications(0)
+        
+        return apps.map { appInfo ->
+            val appName = pm.getApplicationLabel(appInfo).toString()
+            val packageName = appInfo.packageName
+            "$appName ($packageName)"
+        }.sorted().joinToString(separator = "\n").ifEmpty { "No apps found" }
+    }
+
+    private fun getUserInstalledApps(): String {
+        val pm = packageManager
+        val apps = pm.getInstalledApplications(0)
+        
+        return apps.filter { appInfo ->
+            (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
+        }.map { appInfo ->
+            val appName = pm.getApplicationLabel(appInfo).toString()
+            val packageName = appInfo.packageName
+            "$appName ($packageName)"
+        }.sorted().joinToString(separator = "\n").ifEmpty { "No user apps found" }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
