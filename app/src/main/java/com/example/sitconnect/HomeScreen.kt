@@ -1,5 +1,6 @@
 package com.example.sitconnect
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -7,6 +8,10 @@ import android.os.Build
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
+import android.media.projection.MediaProjectionManager
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

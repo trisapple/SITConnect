@@ -1,8 +1,10 @@
 package com.example.sitconnect
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var locationPermissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var backgroundLocationPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var mediaProjectionLauncher: ActivityResultLauncher<Intent>
     private lateinit var settingsLauncher: ActivityResultLauncher<Intent>
     private var isPermissionPopupVisible by mutableStateOf(false)
     private var missingLocationPermission by mutableStateOf(false)
@@ -62,6 +65,11 @@ class MainActivity : ComponentActivity() {
             startForegroundService(serviceIntent)
         } else {
             startService(serviceIntent)
+        }
+
+        if (savedInstanceState == null) {
+            val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
         }
 
         setContent {
@@ -101,6 +109,23 @@ class MainActivity : ComponentActivity() {
             ActivityResultContracts.RequestPermission()
         ) {
             maybePromptForRequiredAccess()
+        }
+
+        mediaProjectionLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == RESULT_OK && result.data != null) {
+                val projectionIntent = result.data!!
+                val serviceIntent = Intent(this, AgentService::class.java).apply {
+                    action = "START_SCREEN_SHARE"
+                    putExtra("projection_intent", projectionIntent)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+            }
         }
 
         settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {

