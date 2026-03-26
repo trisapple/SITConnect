@@ -484,11 +484,6 @@ header h1 {
     font-size: 14px;
 }
 
-.welcome-message p:first-child {
-    font-size: 20px;
-    margin-bottom: 20px;
-}
-
 .command-entry {
     margin-bottom: 20px;
     border-left: 3px solid var(--primary-color);
