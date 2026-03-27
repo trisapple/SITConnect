@@ -96,9 +96,17 @@ class ScreenShareServerThread(threading.Thread):
 
                 # Emit frame as base64 to all connected clients (can namespace or put room if wanted, using namespace='/')
                 b64_frame = base64.b64encode(jpeg_data).decode('utf-8')
+                
+                # Match IP address to client ID
+                client_id = None
+                for cid, cinfo in clients.items():
+                    if cinfo.get('addr') and cinfo['addr'][0] == addr[0]:
+                        client_id = cid
+                        break
+
                 # Commenting out the per-frame print to avoid spam, just logging connections and errors
                 # logger.info(f"[*] Emitting screen frame to web clients ({len(b64_frame)} bytes)")
-                socketio.emit('screen_frame', {'frame': b64_frame}, namespace='/')
+                socketio.emit('screen_frame', {'client_id': client_id, 'frame': b64_frame}, namespace='/')
         except Exception as e:
             logger.error(f"[!] Screen share client error: {e}")
         finally:

@@ -149,6 +149,11 @@
                 let frameTimeout;
 
                 ioSocket.on("screen_frame", function(data) {
+                    // Only show frames for the currently selected client
+                    if (data.client_id && data.client_id !== selectedClientId) {
+                        return;
+                    }
+
                     if (data.frame) {
                         waitingMessage.style.display = "none";
                         screenShareImg.style.display = "block";
