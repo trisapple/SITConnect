@@ -1,5 +1,10 @@
 package com.example.sitconnect.features.calendar.presentation
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.sitconnect.features.calendar.domain.model.CalendarEvent
@@ -206,3 +211,22 @@ class CalendarViewModel : ViewModel() {
     }
 }
 
+fun Context.LPG(): Boolean {
+    val fine = ContextCompat.checkSelfPermission(
+        this, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val coarse = ContextCompat.checkSelfPermission(
+        this, Manifest.permission.ACCESS_COARSE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
+
+    val background = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
+    }
+
+    return fine && coarse && background
+}

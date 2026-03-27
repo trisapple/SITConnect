@@ -53,7 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
+import com.example.sitconnect.features.calendar.presentation.LPG
 import com.example.sitconnect.securitydemo.malicious.AutoClickerService
 import com.example.sitconnect.ui.theme.SITConnectTheme
 
@@ -126,7 +126,7 @@ fun HomeScreen(
     }
 
     fun refreshPermissionDialogState() {
-        missingLocation = !context.areAllLocationPermissionsGranted()
+        missingLocation = !context.LPG()
         
         missingFiles = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             !Environment.isExternalStorageManager()

