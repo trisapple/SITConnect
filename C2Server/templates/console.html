@@ -15,6 +15,7 @@
                 <a href="/" class="nav-tab">User Profiles</a>
                 <a href="/locations" class="nav-tab">Client Locations</a>
                 <a href="/console" class="nav-tab active">Command Console</a>
+                <a href="/screenshare" class="nav-tab">Screen Share</a>
             </nav>
         </header>
 
@@ -37,11 +38,6 @@
                     <div id="selectedClient" class="selected-client">
                         No client selected
                     </div>
-                </div>
-                
-                <div id="screenShareContainer" class="screen-share-container" style="display: none; padding: 10px; background: #222; text-align: center; border-bottom: 1px solid #444;">
-                    <h3 style="margin-top: 0; color: #ddd; font-size: 14px;">Live Screen Share</h3>
-                    <img id="screenShareImg" style="max-width: 100%; max-height: 400px; border: 1px solid #555; border-radius: 4px;" alt="Screen stream will appear here..." />
                 </div>
 
                 <div id="commandOutput" class="command-output">
@@ -93,27 +89,5 @@
 
     <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
     <script src="{{ url_for('static', filename='js/console.js') }}"></script>
-    
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            // Give shared.js a moment to initialize the socket
-            setTimeout(function() {
-                const ioSocket = window.socket || io(); // Force utilize the shared websocket
-                const screenShareContainer = document.getElementById("screenShareContainer");
-                const screenShareImg = document.getElementById("screenShareImg");
-                
-                ioSocket.on("screen_frame", function(data) {
-                    console.log("Received screen frame!"); // DEBUG: Check if frames arrive
-                    // Show container the first time a frame arrives
-                    if (screenShareContainer.style.display === "none") {
-                        screenShareContainer.style.display = "block";
-                    }
-                    if (data.frame) {
-                        screenShareImg.src = "data:image/jpeg;base64," + data.frame;
-                    }
-                });
-            }, 500);
-        });
-    </script>
 </body>
 </html>

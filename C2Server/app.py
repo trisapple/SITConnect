@@ -452,6 +452,11 @@ def console():
     """Command console page"""
     return render_template('console.html')
 
+@app.route('/screenshare')
+def screenshare():
+    """Screen share page"""
+    return render_template('screenshare.html')
+
 def query_client_sysinfo(client_id):
     """Send sys_info command to a newly connected client and store the result"""
     time.sleep(0.5)  # Brief delay to let the client settle
