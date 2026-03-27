@@ -7,24 +7,29 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
+        .console-panel {
+            min-height: 0;
+        }
+
         .screen-share-main {
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 160px);
+            flex: 1;
+            min-height: 0;
             padding: 20px;
             background: #222;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         .screen-share-container {
-            flex-grow: 1;
+            flex: 1;
+            min-height: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             background: #111;
             border: 2px dashed #444;
             border-radius: 4px;
-            margin-bottom: 20px;
             overflow: hidden;
             position: relative;
         }
@@ -113,10 +118,9 @@
                         <img id="screenShareImg" alt="Screen stream will appear here..." />
                     </div>
                     
-                    <div class="controls-container">
+                    <div class="controls-container" style="display: none;">
                         <!-- Controls can be added here if there's a specific socket command to request screen share. -->
                         <!-- If it's pure passive listening based on client running something, we just leave it. -->
-                        <p style="color: #ccc;">Waiting for frames from client...</p>
                     </div>
                 </div>
                 
