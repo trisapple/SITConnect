@@ -5,6 +5,7 @@ let clients = {};
 // Initialize SocketIO connection
 function initializeSocket() {
     socket = io();
+    window.socket = socket; // Expose globally for inline scripts
 
     socket.on('client_connected', (data) => {
         clients[data.client_id] = data;

