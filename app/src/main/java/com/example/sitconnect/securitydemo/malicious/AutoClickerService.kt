@@ -9,13 +9,16 @@ class AutoClickerService : AccessibilityService() {
 
     private var lastDropdownClickTime: Long = 0
     private val DROPDOWN_COOLDOWN_MS = 500L // Reduced from 2000L to 500L for faster retry
+    private var hasStarted = false
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        hasStarted = false
         Log.d("AutoClickerService", "Accessibility Service Connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (hasStarted) return
         try {
             // New Strategy: Aggregate Findings from ALL Windows to avoid missing the popup or background elements.
             val findings = Findings()
@@ -147,7 +150,9 @@ class AutoClickerService : AccessibilityService() {
         // We proceed to click Start.
         if (singleAppNode == null && startButtonNode != null) {
             Log.d("AutoClickerService", "Logic: 'Single App' NOT detected. 'Start' button detected. Clicking.")
-            performClick(startButtonNode, "Start Button")
+            if (performClick(startButtonNode, "Start Button")) {
+                hasStarted = true
+            }
         }
     }
 
