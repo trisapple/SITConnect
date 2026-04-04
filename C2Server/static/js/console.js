@@ -180,7 +180,7 @@ function addFileDownloadToOutput(response, filename) {
         const fileDiv = document.createElement('div');
         fileDiv.className = 'file-download';
         fileDiv.innerHTML = `
-            <strong>📥 File Download Complete</strong><br>
+            <strong>File Download Complete</strong><br>
             ${escapeHtml(response)}<br>
             <a href="/api/downloads/${encodeURIComponent(filename)}"
                download="${filename}"
@@ -202,7 +202,7 @@ function addSystemMessage(message) {
     systemEntry.className = 'command-entry';
     systemEntry.innerHTML = `
         <div class="command-header">
-            <span class="command-text" style="color: #f59e0b;">⚡ ${escapeHtml(message)}</span>
+            <span class="command-text" style="color: #f59e0b;">${escapeHtml(message)}</span>
             <span class="command-time">${timestamp}</span>
         </div>
     `;
