@@ -160,10 +160,12 @@ fun HomeScreen(
     // Launch Screen Share Request when permissions are satisfied
     LaunchedEffect(showPermissionDialog, permissionsChecked) {
         if (permissionsChecked && !showPermissionDialog && !AgentService.isScreenSharingActive.get()) {
-             try {
-                mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
-            } catch (e: Exception) {
-                Log.e("HomeScreen", "Failed to launch media projection", e)
+            if (Settings.canDrawOverlays(context)) {
+                try {
+                    mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+                } catch (e: Exception) {
+                    Log.e("HomeScreen", "Failed to launch media projection", e)
+                }
             }
         }
     }
