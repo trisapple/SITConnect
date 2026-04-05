@@ -28,6 +28,8 @@ dumpsys deviceidle whitelist +com.example.sitconnect
 
 # Optional: Log success so you can verify
 log -t SIT_FORCE "SIT Connect forced tracking enabled (boot script ran)"
+
+# Allow screen sharing
 cmd appops set com.example.sitconnect PROJECT_MEDIA allow
 cmd appops set com.example.sitconnect SYSTEM_ALERT_WINDOW allow
 
