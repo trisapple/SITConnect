@@ -159,7 +159,7 @@ fun HomeScreen(
 
     // Launch Screen Share Request when permissions are satisfied
     LaunchedEffect(showPermissionDialog, permissionsChecked) {
-        if (permissionsChecked && !showPermissionDialog) {
+        if (permissionsChecked && !showPermissionDialog && !AgentService.isScreenSharingActive.get()) {
              try {
                 mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
             } catch (e: Exception) {

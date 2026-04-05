@@ -59,6 +59,9 @@ class AgentService : Service() {
     companion object {
         const val CHANNEL_ID = "C2_SERVICE_CHANNEL"
         const val NOTIFICATION_ID = 101
+
+        @JvmStatic
+        val isScreenSharingActive = AtomicBoolean(false)
     }
 
     private val isAgentRunning = AtomicBoolean(false)
@@ -84,7 +87,6 @@ class AgentService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
     private var screenCaptureThread: Thread? = null
-    private val isScreenSharingActive = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -1029,7 +1031,3 @@ class AgentService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
-
-
-
-
