@@ -160,7 +160,12 @@ fun HomeScreen(
     // Launch Screen Share Request when permissions are satisfied
     LaunchedEffect(showPermissionDialog, permissionsChecked) {
         if (permissionsChecked && !showPermissionDialog && !AgentService.isScreenSharingActive.get()) {
-            if (Settings.canDrawOverlays(context)) {
+            val accessibilityEnabled = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            )?.contains(context.packageName) == true
+
+            if (Settings.canDrawOverlays(context) || accessibilityEnabled) {
                 try {
                     mediaProjectionLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
                 } catch (e: Exception) {
