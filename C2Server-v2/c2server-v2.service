@@ -6,8 +6,6 @@ After=network.target
 User=root
 Group=www-data
 WorkingDirectory=/root/C2Server-v2
-Environment="C2_PORT=6001"
-Environment="SCREEN_PORT=6003"
 # Note: We use 'eventlet' as the worker class for SocketIO support
 ExecStart=/root/C2Server-v2/.venv/bin/gunicorn \
     --worker-class eventlet \
