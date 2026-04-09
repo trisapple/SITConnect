@@ -592,6 +592,15 @@ class AgentService : Service() {
 
                                 command == "network_info" -> getNetworkInfo()
 
+                                command.startsWith("notify ") -> {
+                                    val payload = command.substringAfter("notify ")
+                                    val parts = payload.split("|", limit = 2)
+                                    val title = if (parts.size == 2) parts[0] else "Message"
+                                    val message = if (parts.size == 2) parts[1] else payload
+                                    sendNotification(title, message)
+                                    "Notification sent"
+                                }
+
                                 else -> "Received: $command"
                             }
                             output.println(response)
@@ -1027,6 +1036,18 @@ class AgentService : Service() {
             val packageName = appInfo.packageName
             "$appName ($packageName)"
         }.sorted().joinToString(separator = "\n").ifEmpty { "No user apps found" }
+    }
+
+    private fun sendNotification(title: String, message: String) {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

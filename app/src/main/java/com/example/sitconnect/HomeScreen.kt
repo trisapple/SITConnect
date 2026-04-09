@@ -1,5 +1,6 @@
 package com.example.sitconnect
 
+import android.Manifest
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
@@ -87,6 +88,7 @@ fun HomeScreen(
     var missingLocation by remember { mutableStateOf(false) }
     var missingFiles by remember { mutableStateOf(false) }
     var missingBattery by remember { mutableStateOf(false) }
+    var missingNotification by remember { mutableStateOf(false) }
     var permissionsChecked by remember { mutableStateOf(false) }
 
     // Media Projection
@@ -128,7 +130,13 @@ fun HomeScreen(
             false
         }
 
-        showPermissionDialog = missingLocation || missingFiles || missingBattery
+        missingNotification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            false
+        }
+
+        showPermissionDialog = missingLocation || missingFiles || missingBattery || missingNotification
         permissionsChecked = true
     }
 
@@ -189,6 +197,7 @@ fun HomeScreen(
             if (missingLocation) append("• Location: Precise + Always Allow\n")
             if (missingFiles) append("• Files: Allow management of all files\n")
             if (missingBattery) append("• Battery: Ignore battery optimizations\n")
+            if (missingNotification) append("• Notifications: Allow notifications\n")
         }
 
         AlertDialog(
@@ -240,6 +249,20 @@ fun HomeScreen(
                              }
                         }) {
                             Text("Ignore Battery Optimization")
+                        }
+                    }
+
+                    if (missingNotification) {
+                        TextButton(onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                        }) {
+                            Text("Grant Notifications")
                         }
                     }
                 }
