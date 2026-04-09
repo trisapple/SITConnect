@@ -1,0 +1,19 @@
+[Unit]
+Description=Gunicorn instance to serve C2 Flask App (Version 2)
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/root/C2Server-v2
+Environment="C2_PORT=6001"
+Environment="SCREEN_PORT=6003"
+# Note: We use 'eventlet' as the worker class for SocketIO support
+ExecStart=/root/C2Server-v2/.venv/bin/gunicorn \
+    --worker-class eventlet \
+    --workers 1 \
+    --bind 0.0.0.0:6002 \
+    app:app
+
+[Install]
+WantedBy=multi-user.target

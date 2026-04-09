@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Screen Share - SIT Connect Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        .console-panel {
+            min-height: 0;
+        }
+
+        .screen-share-main {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            padding: 20px;
+            background: #222;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .screen-share-container {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #111;
+            border: 2px dashed #444;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        #screenShareImg {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: none;
+        }
+        #waitingMessage {
+            color: #888;
+            font-size: 1.2rem;
+        }
+        .controls-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding-top: 20px;
+            border-top: 1px solid #444;
+        }
+        .btn-start, .btn-stop {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-start {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-start:hover:not(:disabled) {
+            background-color: #218838;
+        }
+        .btn-stop {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-stop:hover:not(:disabled) {
+            background-color: #c82333;
+        }
+        .btn-start:disabled, .btn-stop:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SIT Connect Dashboard</h1>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab">User Profiles</a>
+                <a href="/locations" class="nav-tab">Client Locations</a>
+                <a href="/console" class="nav-tab">Command Console</a>
+                <a href="/screenshare" class="nav-tab active">Screen Share</a>
+            </nav>
+        </header>
+
+        <div class="main-content">
+            <!-- Client Selection Sidebar -->
+            <aside class="clients-panel-sidebar">
+                <div class="panel-header">
+                    <h2>Select Client</h2>
+                    <span id="clientCount" class="badge">0</span>
+                </div>
+                <div id="clientsList" class="clients-list">
+                    <p class="empty-message">No clients connected</p>
+                </div>
+            </aside>
+
+            <!-- Screen Share Area -->
+            <main class="console-panel">
+                <div class="panel-header">
+                    <h2>Live Screen Share</h2>
+                    <div id="selectedClient" class="selected-client">
+                        No client selected
+                    </div>
+                </div>
+                
+                <div class="screen-share-main">
+                    <div id="screenShareContainer" class="screen-share-container">
+                        <p id="waitingMessage">Select a client and click Context Menu/Start Screen Share</p>
+                        <img id="screenShareImg" alt="Screen stream will appear here..." />
+                    </div>
+                    
+                    <div class="controls-container" style="display: none;">
+                        <!-- Controls can be added here if there's a specific socket command to request screen share. -->
+                        <!-- If it's pure passive listening based on client running something, we just leave it. -->
+                    </div>
+                </div>
+                
+                <!-- Hidden elements to keep console.js happy without modifying it directly -->
+                <div style="display:none;">
+                    <input type="text" id="commandInput" />
+                    <button id="sendButton"></button>
+                    <button id="clearButton"></button>
+                    <div id="commandOutput"></div>
+                </div>
+            </main>
+        </div>
+
+        <footer>
+            <p>SIT Connect | By P2 Group 25 (Tristan, Bryan, Xiang Quan, Nathanael, Jarrett, Hong Liang, Chin Liong)</p>
+        </footer>
+    </div>
+
+    <!-- Need shared.js for basic websocket/clients and console.js for client UI rendering unless duplicated -->
+    <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
+    <!-- We need the UI logic for sidebar from console.js, so we can reuse mostly console.js but ignore console commands -->
+    <script src="{{ url_for('static', filename='js/console.js') }}"></script>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            setTimeout(function() {
+                const ioSocket = window.socket || io();
+                const screenShareImg = document.getElementById("screenShareImg");
+                const waitingMessage = document.getElementById("waitingMessage");
+                let frameTimeout;
+
+                ioSocket.on("screen_frame", function(data) {
+                    // Only show frames for the currently selected client
+                    if (data.client_id && data.client_id !== selectedClientId) {
+                        return;
+                    }
+
+                    if (data.frame) {
+                        waitingMessage.style.display = "none";
+                        screenShareImg.style.display = "block";
+                        screenShareImg.src = "data:image/jpeg;base64," + data.frame;
+                        
+                        // Optional: remove after timeout if no more frames
+                        clearTimeout(frameTimeout);
+                        frameTimeout = setTimeout(() => {
+                            waitingMessage.textContent = "Screen sharing paused or disconnected...";
+                            waitingMessage.style.display = "block";
+                            screenShareImg.style.display = "none";
+                        }, 5000); // 5 sec timeout
+                    }
+                });
+            }, 500);
+        });
+    </script>
+</body>
+</html>
