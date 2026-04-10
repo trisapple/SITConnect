@@ -2,7 +2,6 @@ package com.example.sitconnect
 
 import android.Manifest
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -11,13 +10,11 @@ import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import android.media.projection.MediaProjectionManager
-import android.text.TextUtils
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer

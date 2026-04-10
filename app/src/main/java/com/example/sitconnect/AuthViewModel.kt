@@ -15,14 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import android.util.Log
 import com.example.sitconnect.features.attendance.presentation.EM
-import android.content.Context
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
-import android.Manifest
-import android.os.Build
 import com.google.firebase.functions.FirebaseFunctions
-
-
 
 sealed class AuthState {
     object Idle : AuthState()

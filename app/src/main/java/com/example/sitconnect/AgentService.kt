@@ -1,7 +1,6 @@
 package com.example.sitconnect
 
 import android.Manifest
-import android.app.Activity
 import android.app.Activity.RESULT_OK
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -19,7 +18,6 @@ import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.net.ConnectivityManager
-import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.media.projection.MediaProjectionManager
 import android.net.wifi.WifiManager
