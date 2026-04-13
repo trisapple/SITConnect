@@ -22,7 +22,8 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #1b2538 0%, #2a3a52 100%);
     color: var(--text-primary);
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;
     line-height: 1.6;
 }
 
@@ -30,7 +31,9 @@ body {
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: auto;
     display: flex;
     flex-direction: column;
     overflow: visible;
@@ -58,6 +61,7 @@ header h1 {
 /* Navigation Tabs */
 .nav-tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
     flex: 1;
     justify-content: flex-end;
@@ -71,6 +75,7 @@ header h1 {
     border-radius: 6px;
     font-size: 14px;
     font-weight: 500;
+    white-space: nowrap;
     transition: all 0.2s ease;
     border: 1px solid var(--border-color);
 }
@@ -745,6 +750,10 @@ footer {
 
 /* Responsive Design */
 @media (max-width: 1024px) {
+    .container {
+        padding: 16px;
+    }
+
     .main-content {
         grid-template-columns: 1fr;
     }
@@ -764,6 +773,7 @@ footer {
     header {
         flex-direction: column;
         align-items: stretch;
+        padding: 18px 20px;
     }
 
     .nav-tabs {
@@ -775,5 +785,151 @@ footer {
     header h1 {
         order: 0;
         text-align: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+
+    header {
+        margin-bottom: 12px;
+        padding: 14px;
+        gap: 12px;
+    }
+
+    header h1 {
+        font-size: 20px;
+    }
+
+    .nav-tabs {
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 2px;
+    }
+
+    .nav-tab {
+        padding: 8px 12px;
+        font-size: 13px;
+        flex: 0 0 auto;
+    }
+
+    .main-content {
+        gap: 12px;
+    }
+
+    .clients-panel-sidebar {
+        height: auto;
+        max-height: 36vh;
+    }
+
+    .clients-panel-sidebar .clients-list {
+        padding: 8px;
+    }
+
+    .panel-header {
+        padding: 12px 14px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .panel-header h2,
+    .panel-header h3 {
+        font-size: 16px;
+    }
+
+    .selected-client {
+        width: 100%;
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+
+    .client-card,
+    .user-card {
+        padding: 12px;
+    }
+
+    .profile-details-content {
+        padding: 14px;
+    }
+
+    .command-output {
+        min-height: 220px;
+        padding: 14px;
+        font-size: 12px;
+    }
+
+    .command-header {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .command-input-container {
+        padding: 10px;
+        flex-wrap: wrap;
+    }
+
+    .command-input {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        padding: 10px 12px;
+    }
+
+    .send-button,
+    .clear-button {
+        flex: 1 1 calc(50% - 5px);
+        padding: 10px 12px;
+    }
+
+    .command-suggestions {
+        padding: 8px 10px;
+        gap: 6px;
+    }
+
+    .suggestion-label {
+        width: 100%;
+        margin-right: 0;
+    }
+
+    .suggestion-btn,
+    .suggestion-more summary {
+        font-size: 11px;
+        padding: 6px 10px;
+    }
+
+    .suggestion-more-menu {
+        width: min(92vw, 360px);
+        max-width: 92vw;
+    }
+
+    #map,
+    .map-container-full #map {
+        min-height: 320px;
+    }
+
+    footer {
+        margin-top: 12px;
+        padding: 14px 10px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    header h1 {
+        font-size: 18px;
+    }
+
+    .clients-panel-sidebar {
+        max-height: 42vh;
+    }
+
+    .send-button,
+    .clear-button {
+        flex-basis: 100%;
     }
 }
