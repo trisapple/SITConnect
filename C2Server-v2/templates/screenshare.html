@@ -6,94 +6,6 @@
     <title>Live Screen Share - SIT Connect Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <style>
-        .console-panel {
-            min-height: 0;
-        }
-
-        .screen-share-main {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            min-height: 0;
-            padding: 20px;
-            background: #222;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .screen-share-container {
-            flex: 1;
-            min-height: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #111;
-            border: 2px dashed #444;
-            border-radius: 4px;
-            overflow: hidden;
-            position: relative;
-        }
-        #screenShareImg {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: none;
-        }
-        #waitingMessage {
-            color: #888;
-            font-size: 1.2rem;
-        }
-        .controls-container {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            padding-top: 20px;
-            border-top: 1px solid #444;
-        }
-        .btn-start, .btn-stop {
-            padding: 10px 20px;
-            font-size: 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-start {
-            background-color: #28a745;
-            color: white;
-        }
-        .btn-start:hover:not(:disabled) {
-            background-color: #218838;
-        }
-        .btn-stop {
-            background-color: #dc3545;
-            color: white;
-        }
-        .btn-stop:hover:not(:disabled) {
-            background-color: #c82333;
-        }
-        .btn-start:disabled, .btn-stop:disabled {
-            background-color: #6c757d;
-            cursor: not-allowed;
-            opacity: 0.65;
-        }
-
-        @media (max-width: 768px) {
-            .screen-share-main {
-                padding: 12px;
-            }
-
-            .screen-share-container {
-                min-height: 260px;
-            }
-
-            #waitingMessage {
-                font-size: 1rem;
-                text-align: center;
-                padding: 0 10px;
-            }
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -120,26 +32,22 @@
             </aside>
 
             <!-- Screen Share Area -->
-            <main class="console-panel">
+            <main class="console-panel screen-share-panel">
                 <div class="panel-header">
                     <h2>Live Screen Share</h2>
                     <div id="selectedClient" class="selected-client">
                         No client selected
                     </div>
                 </div>
-                
-                <div class="screen-share-main">
-                    <div id="screenShareContainer" class="screen-share-container">
+
+                <div id="screenShareOutput" class="command-output screen-share-output">
+                    <div class="welcome-message">
                         <p id="waitingMessage">Select a client and click Context Menu/Start Screen Share</p>
-                        <img id="screenShareImg" alt="Screen stream will appear here..." />
+                        <p>Screen frames will appear here in real time.</p>
                     </div>
-                    
-                    <div class="controls-container" style="display: none;">
-                        <!-- Controls can be added here if there's a specific socket command to request screen share. -->
-                        <!-- If it's pure passive listening based on client running something, we just leave it. -->
-                    </div>
+                    <img id="screenShareImg" alt="Screen stream will appear here..." />
                 </div>
-                
+
                 <!-- Hidden elements to keep console.js happy without modifying it directly -->
                 <div style="display:none;">
                     <input type="text" id="commandInput" />

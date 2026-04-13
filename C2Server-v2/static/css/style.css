@@ -478,6 +478,36 @@ header h1 {
     background: var(--dark-bg);
 }
 
+.screen-share-output {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    position: relative;
+}
+
+.screen-share-output .welcome-message {
+    width: 100%;
+    padding: 40px 20px;
+}
+
+.screen-share-output .welcome-message p {
+    margin-bottom: 8px;
+}
+
+#screenShareImg {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    display: none;
+}
+
+#waitingMessage {
+    color: #888;
+    font-size: 1.2rem;
+}
+
 .welcome-message {
     text-align: center;
     padding: 60px 20px;
@@ -863,6 +893,14 @@ footer {
         font-size: 12px;
     }
 
+    .screen-share-output {
+        min-height: 220px;
+    }
+
+    .screen-share-output .welcome-message {
+        padding: 28px 16px;
+    }
+
     .command-header {
         flex-wrap: wrap;
         gap: 6px;
@@ -910,6 +948,12 @@ footer {
     #map,
     .map-container-full #map {
         min-height: 320px;
+    }
+
+    #waitingMessage {
+        font-size: 1rem;
+        text-align: center;
+        padding: 0 10px;
     }
 
     footer {
