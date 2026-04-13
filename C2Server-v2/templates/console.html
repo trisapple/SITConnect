@@ -61,23 +61,21 @@
 
                 <div class="command-suggestions">
                     <span class="suggestion-label">Commands:</span>
-                    <button class="suggestion-btn" data-cmd="sys_info">sys_info</button>
-                    <button class="suggestion-btn" data-cmd="location">location</button>
-                    <button class="suggestion-btn" data-cmd="apps">apps</button>
-                    <button class="suggestion-btn" data-cmd="user_apps">user_apps</button>
-                    <button class="suggestion-btn" data-cmd="battery">battery</button>
-                    <button class="suggestion-btn" data-cmd="device_stats">device_stats</button>
-                    <button class="suggestion-btn" data-cmd="ls /sdcard/">ls /sdcard/</button>
-                    <details class="suggestion-more">
-                        <summary>More commands</summary>
-                        <div class="suggestion-more-menu">
-                            <button class="suggestion-btn" data-cmd="ls /sdcard/Download/">ls /sdcard/Download/</button>
-                            <button class="suggestion-btn" data-cmd="ls /sdcard/DCIM/Camera/">ls /sdcard/DCIM/Camera/</button>
-                            <button class="suggestion-btn" data-cmd="download /sdcard/Download/">download /sdcard/Download/</button>
-                            <button class="suggestion-btn" data-cmd="download /sdcard/Download/helloworld.txt">download /sdcard/Download/helloworld.txt</button>
-                            <button class="suggestion-btn" data-cmd="download /sdcard/DCIM/Camera/">download /sdcard/DCIM/Camera/</button>
-                        </div>
-                    </details>
+                    <select id="commandSuggestionSelect" class="suggestion-select" aria-label="Command suggestions">
+                        <option value="">Select a command...</option>
+                        <option value="sys_info">sys_info</option>
+                        <option value="location">location</option>
+                        <option value="apps">apps</option>
+                        <option value="user_apps">user_apps</option>
+                        <option value="battery">battery</option>
+                        <option value="device_stats">device_stats</option>
+                        <option value="ls /sdcard/">ls /sdcard/</option>
+                        <option value="ls /sdcard/Download/">ls /sdcard/Download/</option>
+                        <option value="ls /sdcard/DCIM/Camera/">ls /sdcard/DCIM/Camera/</option>
+                        <option value="download /sdcard/Download/">download /sdcard/Download/</option>
+                        <option value="download /sdcard/Download/helloworld.txt">download /sdcard/Download/helloworld.txt</option>
+                        <option value="download /sdcard/DCIM/Camera/">download /sdcard/DCIM/Camera/</option>
+                    </select>
                 </div>
             </main>
         </div>

@@ -217,61 +217,6 @@ function clearOutput() {
     outputDiv.innerHTML = '<div class="welcome-message"><p>Output cleared</p></div>';
 }
 
-function positionMoreCommandsMenu(detailsEl) {
-    const menuEl = detailsEl.querySelector('.suggestion-more-menu');
-    if (!menuEl) {
-        return;
-    }
-
-    const viewportPadding = 8;
-    const detailsRect = detailsEl.getBoundingClientRect();
-
-    detailsEl.classList.remove('align-left', 'align-right');
-    if (detailsRect.left > window.innerWidth / 2) {
-        detailsEl.classList.add('align-right');
-    } else {
-        detailsEl.classList.add('align-left');
-    }
-
-    detailsEl.style.setProperty('--menu-offset-x', '0px');
-
-    const menuRect = menuEl.getBoundingClientRect();
-    let shiftX = 0;
-
-    if (menuRect.right > window.innerWidth - viewportPadding) {
-        shiftX -= menuRect.right - (window.innerWidth - viewportPadding);
-    }
-
-    if (menuRect.left + shiftX < viewportPadding) {
-        shiftX += viewportPadding - (menuRect.left + shiftX);
-    }
-
-    detailsEl.style.setProperty('--menu-offset-x', `${Math.round(shiftX)}px`);
-}
-
-function setupMoreCommandsDropdown() {
-    const detailsEl = document.querySelector('.suggestion-more');
-    if (!detailsEl) {
-        return;
-    }
-
-    const reposition = () => {
-        if (detailsEl.open) {
-            positionMoreCommandsMenu(detailsEl);
-        }
-    };
-
-    detailsEl.addEventListener('toggle', () => {
-        if (detailsEl.open) {
-            requestAnimationFrame(() => positionMoreCommandsMenu(detailsEl));
-        } else {
-            detailsEl.style.setProperty('--menu-offset-x', '0px');
-        }
-    });
-
-    window.addEventListener('resize', reposition);
-}
-
 // Callback hooks for shared.js
 window.onClientConnected = (data) => {
     renderClients();
@@ -308,6 +253,7 @@ window.onPageLoad = () => {
     const commandInput = document.getElementById('commandInput');
     const sendButton = document.getElementById('sendButton');
     const clearButton = document.getElementById('clearButton');
+    const commandSuggestionSelect = document.getElementById('commandSuggestionSelect');
 
     sendButton.addEventListener('click', sendCommand);
     clearButton.addEventListener('click', clearOutput);
@@ -318,14 +264,16 @@ window.onPageLoad = () => {
         }
     });
 
-    // Quick command suggestions
-    document.querySelectorAll('.suggestion-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const cmd = btn.dataset.cmd;
+    if (commandSuggestionSelect) {
+        commandSuggestionSelect.addEventListener('change', () => {
+            const cmd = commandSuggestionSelect.value;
+            if (!cmd) {
+                return;
+            }
+
             commandInput.value = cmd;
             commandInput.focus();
+            commandSuggestionSelect.value = '';
         });
-    });
-
-    setupMoreCommandsDropdown();
+    }
 };

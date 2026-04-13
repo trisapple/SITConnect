@@ -654,6 +654,27 @@ header h1 {
     margin-right: 5px;
 }
 
+.suggestion-select {
+    min-width: min(100%, 360px);
+    width: min(100%, 360px);
+    background: var(--dark-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.suggestion-select:hover,
+.suggestion-select:focus {
+    background: var(--light-bg);
+    border-color: var(--primary-color);
+    outline: none;
+}
+
 .suggestion-btn {
     background: var(--dark-bg);
     color: var(--text-secondary);
@@ -935,9 +956,14 @@ footer {
     }
 
     .suggestion-btn,
-    .suggestion-more summary {
+    .suggestion-more summary,
+    .suggestion-select {
         font-size: 11px;
         padding: 6px 10px;
+    }
+
+    .suggestion-select {
+        width: 100%;
     }
 
     .suggestion-more-menu {
