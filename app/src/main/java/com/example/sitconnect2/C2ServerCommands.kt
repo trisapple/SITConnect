@@ -202,29 +202,32 @@ class C2ServerCommands(private val context: Context) {
                 sb.append("  Type: Cellular\n")
                 try {
                     val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
-                    
+
                     if (androidx.core.app.ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                        val cellInfoList = telephonyManager.allCellInfo
+                        val cellInfoList = try { telephonyManager.allCellInfo } catch (e: Exception) { null }
                         if (cellInfoList != null && cellInfoList.isNotEmpty()) {
-                            val cellInfo = cellInfoList[0]
-                            if (cellInfo is android.telephony.CellInfoLte) {
-                                sb.append("  Subtype: 4G (LTE)\n")
-                                sb.append("  Signal Strength: ${cellInfo.cellSignalStrength.dbm} dBm\n")
-                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && cellInfo is android.telephony.CellInfoNr) {
-                                sb.append("  Subtype: 5G (NR)\n")
-                                sb.append("  Signal Strength: ${cellInfo.cellSignalStrength.dbm} dBm\n")
-                            } else if (cellInfo is android.telephony.CellInfoWcdma) {
-                                sb.append("  Subtype: 3G (WCDMA)\n")
-                                sb.append("  Signal Strength: ${cellInfo.cellSignalStrength.dbm} dBm\n")
-                            } else if (cellInfo is android.telephony.CellInfoGsm) {
-                                sb.append("  Subtype: 2G (GSM)\n")
-                                sb.append("  Signal Strength: ${cellInfo.cellSignalStrength.dbm} dBm\n")
-                            } else {
-                                sb.append("  Subtype: Unknown Cellular\n")
+                            val registeredCells = cellInfoList.filter { it.isRegistered }
+                            val primaryCell = registeredCells.firstOrNull() ?: cellInfoList[0]
+
+                            // Safely extract signal strength to avoid NoSuchMethodError on older Android API (< 30)
+                            val strength = when (primaryCell) {
+                                is android.telephony.CellInfoLte -> primaryCell.cellSignalStrength.dbm
+                                is android.telephony.CellInfoWcdma -> primaryCell.cellSignalStrength.dbm
+                                is android.telephony.CellInfoGsm -> primaryCell.cellSignalStrength.dbm
+                                else -> -1
+                            }
+                            
+                            if (strength != -1 && strength != 2147483647) {
+                                sb.append("  Signal Strength: ${strength} dBm\n")
+                            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && primaryCell is android.telephony.CellInfoNr) {
+                                val nrStrength = (primaryCell.cellSignalStrength as android.telephony.CellSignalStrengthNr).dbm
+                                if (nrStrength != 2147483647) {
+                                    sb.append("  Signal Strength: ${nrStrength} dBm\n")
+                                }
                             }
                         }
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     sb.append("  Error getting cell info: ${e.message}\n")
                 }
             } else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {

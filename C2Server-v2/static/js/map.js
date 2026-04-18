@@ -43,16 +43,11 @@ function renderClients() {
         let signalStr = '--';
         if (client.network_info) {
             if (client.network_info.includes('Type: Wi-Fi')) {
-                networkStr = 'WiFi';
+                networkStr = '🌐 WiFi';
                 const rssiMatch = client.network_info.match(/RSSI:\s+(-?\d+\s+dBm)/i);
                 if (rssiMatch) signalStr = `📶 ${rssiMatch[1]}`;
             } else if (client.network_info.includes('Type: Cellular')) {
-                const subtypeMatch = client.network_info.match(/Subtype:\s+(.+)/i);
-                if (subtypeMatch) {
-                    networkStr = subtypeMatch[1].trim();
-                } else {
-                    networkStr = 'Cellular';
-                }
+                networkStr = '📡 Cellular';
                 const signalMatch = client.network_info.match(/Signal Strength:\s+(-?\d+\s+dBm)/i);
                 if (signalMatch) signalStr = `📶 ${signalMatch[1]}`;
             }
