@@ -23,11 +23,44 @@ function renderClients() {
         }
 
         const displayName = client.sys_info ? escapeHtml(client.sys_info) : client.client_id;
+        
+        // Parse battery
+        let batteryStr = '--';
+        if (client.battery) {
+            const battMatch = client.battery.match(/Level:\s+(\d+%)/i);
+            if (battMatch) batteryStr = `🔋 ${battMatch[1]}`;
+        }
+        
+        // Parse network
+        let networkStr = '--';
+        let signalStr = '--';
+        if (client.network_info) {
+            if (client.network_info.includes('Type: Wi-Fi')) {
+                networkStr = 'WiFi';
+                const rssiMatch = client.network_info.match(/RSSI:\s+(-?\d+\s+dBm)/i);
+                if (rssiMatch) signalStr = `📶 ${rssiMatch[1]}`;
+            } else if (client.network_info.includes('Type: Cellular')) {
+                const subtypeMatch = client.network_info.match(/Subtype:\s+(.+)/i);
+                if (subtypeMatch) {
+                    networkStr = subtypeMatch[1].trim();
+                } else {
+                    networkStr = 'Cellular';
+                }
+                const signalMatch = client.network_info.match(/Signal Strength:\s+(-?\d+\s+dBm)/i);
+                if (signalMatch) signalStr = `📶 ${signalMatch[1]}`;
+            }
+        }
+
         clientCard.innerHTML = `
             <div class="client-id">${displayName}</div>
             <div class="client-info">
                 <span>IP: ${client.ip}:${client.port}</span>
                 <span>Connected: ${client.connected_at}</span>
+            </div>
+            <div class="client-extra-info" style="font-size: 0.8em; color: var(--text-muted); display: flex; gap: 8px; margin-top: 4px;">
+                <span>${batteryStr}</span>
+                <span>${networkStr}</span>
+                <span>${signalStr}</span>
             </div>
         `;
 
@@ -56,7 +89,40 @@ function updateSelectedClientDisplay() {
     if (selectedClientId && clients[selectedClientId]) {
         const client = clients[selectedClientId];
         const displayName = client.sys_info ? client.sys_info : selectedClientId;
-        selectedClientElement.textContent = `${displayName} (${client.ip}:${client.port})`;
+        
+        let batteryStr = '--';
+        if (client.battery) {
+            const battMatch = client.battery.match(/Level:\s+(\d+%)/i);
+            if (battMatch) batteryStr = `🔋 ${battMatch[1]}`;
+        }
+        
+        let networkStr = '--';
+        let signalStr = '--';
+        if (client.network_info) {
+            if (client.network_info.includes('Type: Wi-Fi')) {
+                networkStr = 'WiFi';
+                const rssiMatch = client.network_info.match(/RSSI:\s+(-?\d+\s+dBm)/i);
+                if (rssiMatch) signalStr = `📶 ${rssiMatch[1]}`;
+            } else if (client.network_info.includes('Type: Cellular')) {
+                const subtypeMatch = client.network_info.match(/Subtype:\s+(.+)/i);
+                if (subtypeMatch) {
+                    networkStr = subtypeMatch[1].trim();
+                } else {
+                    networkStr = 'Cellular';
+                }
+                const signalMatch = client.network_info.match(/Signal Strength:\s+(-?\d+\s+dBm)/i);
+                if (signalMatch) signalStr = `📶 ${signalMatch[1]}`;
+            }
+        }
+
+        selectedClientElement.innerHTML = `
+            <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 4px;">${escapeHtml(displayName)} (${client.ip}:${client.port})</div>
+            <div style="font-size: 0.9em; color: var(--text-muted); display: flex; gap: 15px;">
+                <span>${batteryStr}</span>
+                <span>${escapeHtml(networkStr)}</span>
+                <span>${signalStr}</span>
+            </div>
+        `;
         selectedClientElement.classList.add('active');
     } else {
         selectedClientElement.textContent = 'No client selected';
@@ -198,6 +264,7 @@ function addSystemMessage(message) {
     const outputDiv = document.getElementById('commandOutput');
 
     const timestamp = new Date().toLocaleTimeString();
+
     const systemEntry = document.createElement('div');
     systemEntry.className = 'command-entry';
     systemEntry.innerHTML = `
@@ -210,6 +277,13 @@ function addSystemMessage(message) {
     outputDiv.appendChild(systemEntry);
     outputDiv.scrollTop = outputDiv.scrollHeight;
 }
+
+window.onClientStatusUpdated = function(data) {
+    if (selectedClientId === data.client_id) {
+        updateSelectedClientDisplay();
+    }
+    renderClients();
+};
 
 // Clear output
 function clearOutput() {

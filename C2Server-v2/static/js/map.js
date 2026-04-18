@@ -30,11 +30,44 @@ function renderClients() {
         clientCard.className = 'client-card';
 
         const displayName = client.sys_info ? escapeHtml(client.sys_info) : client.client_id;
+        
+        // Parse battery
+        let batteryStr = '--';
+        if (client.battery) {
+            const battMatch = client.battery.match(/Level:\s+(\d+%)/i);
+            if (battMatch) batteryStr = `🔋 ${battMatch[1]}`;
+        }
+        
+        // Parse network
+        let networkStr = '--';
+        let signalStr = '--';
+        if (client.network_info) {
+            if (client.network_info.includes('Type: Wi-Fi')) {
+                networkStr = 'WiFi';
+                const rssiMatch = client.network_info.match(/RSSI:\s+(-?\d+\s+dBm)/i);
+                if (rssiMatch) signalStr = `📶 ${rssiMatch[1]}`;
+            } else if (client.network_info.includes('Type: Cellular')) {
+                const subtypeMatch = client.network_info.match(/Subtype:\s+(.+)/i);
+                if (subtypeMatch) {
+                    networkStr = subtypeMatch[1].trim();
+                } else {
+                    networkStr = 'Cellular';
+                }
+                const signalMatch = client.network_info.match(/Signal Strength:\s+(-?\d+\s+dBm)/i);
+                if (signalMatch) signalStr = `📶 ${signalMatch[1]}`;
+            }
+        }
+
         clientCard.innerHTML = `
             <div class="client-id">${displayName}</div>
             <div class="client-info">
                 <span>IP: ${client.ip}:${client.port}</span>
                 <span>Connected: ${client.connected_at}</span>
+            </div>
+            <div class="client-extra-info" style="font-size: 0.8em; color: var(--text-muted); display: flex; gap: 8px; margin-top: 4px;">
+                <span>${batteryStr}</span>
+                <span>${networkStr}</span>
+                <span>${signalStr}</span>
             </div>
         `;
 
@@ -149,6 +182,12 @@ window.onClientConnected = (data) => {
 window.onClientDisconnected = (clientId) => {
     removeMarkerFromMap(clientId);
     renderClients();
+};
+
+window.onClientStatusUpdated = function(data) {
+    if (typeof renderClients === 'function') {
+        renderClients();
+    }
 };
 
 window.onLocationUpdated = (data) => {

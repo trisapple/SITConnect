@@ -21,7 +21,19 @@ function initializeSocket() {
     socket.on('client_info_updated', (data) => {
         if (clients[data.client_id]) {
             clients[data.client_id].sys_info = data.sys_info;
+            // Also merge the other properties to prevent them from being lost if info emits differently formatted object
+            if (data.battery !== undefined) clients[data.client_id].battery = data.battery;
+            if (data.network_info !== undefined) clients[data.client_id].network_info = data.network_info;
+            
             if (window.onClientInfoUpdated) window.onClientInfoUpdated(data);
+        }
+    });
+
+    socket.on('client_status_updated', (data) => {
+        if (clients[data.client_id]) {
+            clients[data.client_id].battery = data.battery;
+            clients[data.client_id].network_info = data.network_info;
+            if (window.onClientStatusUpdated) window.onClientStatusUpdated(data);
         }
     });
 
@@ -41,13 +53,18 @@ function initializeSocket() {
 // Load existing clients on page load
 async function loadClients() {
     try {
-        const response = await fetch('/api/clients');
+        const response = await fetch('/api/clients', { cache: 'no-store' });
         const data = await response.json();
 
         const clientList = Array.isArray(data) ? data : (Array.isArray(data.clients) ? data.clients : []);
 
         clientList.forEach(client => {
-            clients[client.client_id] = client;
+            if (clients[client.client_id]) {
+                // Merge data instead of full overwrite to preserve local state until API updates match
+                Object.assign(clients[client.client_id], client);
+            } else {
+                clients[client.client_id] = client;
+            }
         });
 
         if (window.onClientsLoaded) window.onClientsLoaded(clientList);

