@@ -106,12 +106,7 @@ function updateSelectedClientDisplay() {
         }
 
         selectedClientElement.innerHTML = `
-            <div style="font-weight: bold; font-size: 1.1em; margin-bottom: 4px;">${escapeHtml(displayName)} (${client.ip}:${client.port})</div>
-            <div style="font-size: 0.9em; color: var(--text-muted); display: flex; gap: 15px;">
-                <span>${batteryStr}</span>
-                <span>${escapeHtml(networkStr)}</span>
-                <span>${signalStr}</span>
-            </div>
+            <div>${escapeHtml(displayName)})</div>
         `;
         selectedClientElement.classList.add('active');
     } else {
