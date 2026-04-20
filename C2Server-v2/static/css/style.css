@@ -31,12 +31,11 @@ body {
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
-    min-height: 100vh;
-    min-height: 100dvh;
-    height: auto;
+    height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
-    overflow: visible;
+    overflow: hidden;
 }
 
 /* Header Styles */
@@ -270,6 +269,7 @@ header h1 {
 .console-panel,
 .map-panel {
     flex: 1;
+    min-height: 0;
 }
 
 .panel-header {
@@ -803,10 +803,29 @@ footer {
 @media (max-width: 1024px) {
     .container {
         padding: 16px;
+        height: auto;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow: visible;
     }
 
     .main-content {
         grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .console-panel {
+        height: 600px;
+    }
+
+    .map-panel {
+        min-height: 320px;
+    }
+
+    #map,
+    .map-container-full #map {
+        min-height: 320px;
     }
 
     .profile-grid {
@@ -817,8 +836,9 @@ footer {
         grid-template-columns: 1fr;
     }
 
-    .clients-panel {
-        max-height: 300px;
+    .clients-panel,
+    .clients-panel-sidebar {
+        height: 300px;
     }
 
     header {
@@ -873,8 +893,7 @@ footer {
     }
 
     .clients-panel-sidebar {
-        height: auto;
-        max-height: 36vh;
+        height: 300px;
     }
 
     .clients-panel-sidebar .clients-list {
