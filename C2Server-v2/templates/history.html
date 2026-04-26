@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location History - SIT Connect Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #historyMap {
+            width: 100%;
+            flex: 1;
+            background: var(--dark-bg);
+            /* Reset the height to fill the map-panel container */
+            min-height: 500px;
+        }
+        .filter-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        select, button.btn-secondary {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background-color: var(--surface-bg-alt);
+            color: var(--text-color);
+            cursor: pointer;
+        }
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SIT Connect Dashboard</h1>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab">User Profiles</a>
+                <a href="/locations" class="nav-tab">Client Locations</a>
+                <a href="/history" class="nav-tab active">Location History</a>
+                <a href="/console" class="nav-tab">Command Console</a>
+                <a href="/screenshare" class="nav-tab">Screen Share</a>
+            </nav>
+        </header>
+
+        <div class="main-content" style="display: flex; flex-direction: column;">
+            <!-- Full Width Map Panel -->
+            <main class="map-panel" style="width: 100%; display: flex; flex-direction: column;">
+                <div class="panel-header" style="justify-content: space-between; align-items: center; display: flex;">
+                    <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-color);">Full Location History</h3>
+                    <div class="filter-controls">
+                        <label for="clientSelect"><strong>Select Client:</strong></label>
+                        <select id="clientSelect">
+                            <option value="all">All Clients</option>
+                        </select>
+                        <button id="refreshMapBtn" class="btn-secondary"><i class="bi bi-arrow-repeat"></i> Refresh Data</button>
+                    </div>
+                </div>
+                <div id="historyMap"></div>
+            </main>
+        </div>
+
+        <footer>
+            <p>SIT Connect | By P2 Group 25</p>
+        </footer>
+    </div>
+    <script>
+        let map = null;
+        let routeLayers = [];
+        let markerLayers = [];
+        let allHistoryData = [];
+
+        function initMap() {
+            if (map) map.remove();
+            map = L.map('historyMap').setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+        }
+
+        const colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000'];
+
+        function getColorForClient(clientId) {
+            let hash = 0;
+            for (let i = 0; i < clientId.length; i++) {
+                hash = clientId.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            return colors[Math.abs(hash) % colors.length];
+        }
+
+        function drawHistoryMap(clientIdFilter) {
+            // Clear existing layers
+            routeLayers.forEach(layer => map.removeLayer(layer));
+            markerLayers.forEach(layer => map.removeLayer(layer));
+            routeLayers = [];
+            markerLayers = [];
+
+            // Group by client
+            const grouped = {};
+            allHistoryData.forEach(item => {
+                if (clientIdFilter !== 'all' && item.client_id !== clientIdFilter) return;
+                
+                if (!grouped[item.client_id]) grouped[item.client_id] = [];
+                grouped[item.client_id].push(item);
+            });
+
+            const allLatLngs = [];
+
+            Object.keys(grouped).forEach(clientId => {
+                const points = grouped[clientId];
+                points.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+                const latLngs = points.map(p => [parseFloat(p.lat), parseFloat(p.lng)]);
+                allLatLngs.push(...latLngs);
+
+                const cColor = getColorForClient(clientId);
+
+                // Draw line
+                const polyline = L.polyline(latLngs, {
+                    color: cColor,
+                    weight: 4,
+                    opacity: 0.8,
+                    dashArray: '5, 10'
+                }).addTo(map);
+                routeLayers.push(polyline);
+
+                // Draw points
+                points.forEach((p, idx) => {
+                    const isLatest = idx === points.length - 1;
+                    
+                    const circleMarker = L.circleMarker([p.lat, p.lng], {
+                        radius: isLatest ? 8 : 4,
+                        fillColor: cColor,
+                        color: isLatest ? '#fff' : cColor,
+                        weight: isLatest ? 2 : 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+
+                    const ts = new Date(p.timestamp).toLocaleString();
+                    const popupContent = `
+                        <div style="min-width: 150px;">
+                            <h4 style="margin: 0 0 5px 0; color: ${cColor};">${p.client_id}</h4>
+                            <p style="margin: 3px 0; font-size: 12px;"><strong>Time:</strong> ${ts}</p>
+                            <p style="margin: 3px 0; font-size: 12px;"><strong>Lat:</strong> ${p.lat}</p>
+                            <p style="margin: 3px 0; font-size: 12px;"><strong>Lng:</strong> ${p.lng}</p>
+                            ${isLatest ? '<span style="background:var(--primary-color);color:#fff;padding:2px 6px;border-radius:10px;font-size:10px;">Latest Known Location</span>' : ''}
+                        </div>
+                    `;
+                    circleMarker.bindPopup(popupContent);
+                    markerLayers.push(circleMarker);
+                });
+            });
+
+            if (allLatLngs.length > 0) {
+                const bounds = L.latLngBounds(allLatLngs);
+                map.fitBounds(bounds, { padding: [50, 50] });
+            } else {
+                map.setView([0, 0], 2);
+            }
+        }
+
+        function loadHistory() {
+            fetch('/api/location_history')
+                .then(res => res.json())
+                .then(data => {
+                    allHistoryData = data.history || [];
+                    
+                    // Update client select map
+                    const select = document.getElementById('clientSelect');
+                    const currentVal = select.value;
+                    const clients = [...new Set(allHistoryData.map(d => d.client_id))].sort();
+                    
+                    select.innerHTML = '<option value="all">All Clients</option>';
+                    clients.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c;
+                        opt.textContent = c;
+                        select.appendChild(opt);
+                    });
+                    
+                    if (clients.includes(currentVal)) {
+                        select.value = currentVal;
+                    }
+
+                    drawHistoryMap(select.value);
+                })
+                .catch(err => {
+                    console.error('Error loading history:', err);
+                    alert('Error loading location history data.');
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadHistory();
+
+            document.getElementById('clientSelect').addEventListener('change', (e) => {
+                drawHistoryMap(e.target.value);
+            });
+
+            document.getElementById('refreshMapBtn').addEventListener('click', () => {
+                loadHistory();
+            });
+        });
+    </script>
+</body>
+</html>
