@@ -21,7 +21,7 @@
             gap: 15px;
             align-items: center;
         }
-        select, button.btn-secondary {
+        select {
             padding: 8px 12px;
             border-radius: 4px;
             border: 1px solid var(--border-color);
@@ -58,7 +58,7 @@
                         <select id="clientSelect">
                             <option value="all">All Clients</option>
                         </select>
-                        <button id="refreshMapBtn" class="btn-secondary"><i class="bi bi-arrow-repeat"></i> Refresh Data</button>
+                        <button id="refreshMapBtn" class="refresh-btn"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Refresh Data</button>
                     </div>
                 </div>
                 <div id="historyMap"></div>
@@ -66,7 +66,7 @@
         </div>
 
         <footer>
-            <p>SIT Connect | By P2 Group 25</p>
+            <p>SIT Connect | By P2 Group 25 (Tristan, Bryan, Xiang Quan, Nathanael, Jarrett, Hong Liang, Chin Liong)</p>
         </footer>
     </div>
     <script>
@@ -211,8 +211,51 @@
                 drawHistoryMap(e.target.value);
             });
 
-            document.getElementById('refreshMapBtn').addEventListener('click', () => {
-                loadHistory();
+            document.getElementById('refreshMapBtn').addEventListener('click', (e) => {
+                const btn = e.currentTarget;
+                btn.classList.add('is-loading');
+                btn.disabled = true;
+                
+                // Keep spinning visually for at least 600ms before returning to normal
+                const minWaitP = new Promise(res => setTimeout(res, 600));
+                const fetchP = fetch('/api/location_history')
+                    .then(res => res.json())
+                    .then(data => {
+                        allHistoryData = data.history || [];
+                        
+                        // Update client select map
+                        const select = document.getElementById('clientSelect');
+                        const currentVal = select.value;
+                        
+                        const clientsMap = {};
+                        allHistoryData.forEach(d => {
+                            clientsMap[d.client_id] = d.device_name || d.client_id;
+                        });
+                        const clients = Object.keys(clientsMap).sort();
+                        
+                        select.innerHTML = '<option value="all">All Clients</option>';
+                        clients.forEach(c => {
+                            const opt = document.createElement('option');
+                            opt.value = c;
+                            opt.textContent = `${clientsMap[c]} (${c})`;
+                            select.appendChild(opt);
+                        });
+                        
+                        if (clients.includes(currentVal)) {
+                            select.value = currentVal;
+                        }
+
+                        drawHistoryMap(select.value);
+                    })
+                    .catch(err => {
+                        console.error('Error loading history:', err);
+                        alert('Error loading location history data.');
+                    });
+                
+                Promise.all([fetchP, minWaitP]).finally(() => {
+                    btn.classList.remove('is-loading');
+                    btn.disabled = false;
+                });
             });
         });
     </script>
