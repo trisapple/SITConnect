@@ -403,7 +403,6 @@ header h1 {
 
 .refresh-btn:hover {
     background: #1d4ed8;
-    transform: scale(1.05);
 }
 
 .refresh-btn.is-loading {

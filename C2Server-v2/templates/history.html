@@ -48,16 +48,24 @@
             </nav>
         </header>
 
-        <div class="main-content" style="display: flex; flex-direction: column;">
-            <!-- Full Width Map Panel -->
-            <main class="map-panel" style="width: 100%; display: flex; flex-direction: column;">
-                <div class="panel-header" style="justify-content: space-between; align-items: center; display: flex;">
-                    <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-color);">Full Location History</h3>
-                    <div class="filter-controls">
-                        <label for="clientSelect"><strong>Select Client:</strong></label>
-                        <select id="clientSelect">
-                            <option value="all">All Clients</option>
-                        </select>
+        <div class="main-content">
+            <!-- Client Selection Sidebar -->
+            <aside class="clients-panel-sidebar">
+                <div class="panel-header">
+                    <h2>Select Client</h2>
+                    <span id="clientCount" class="badge">0</span>
+                </div>
+                <div id="clientsList" class="clients-list">
+                    <p class="empty-message">No history available</p>
+                </div>
+            </aside>
+
+            <!-- Map Panel -->
+            <main class="map-panel">
+                <div class="panel-header">
+                    <h3>Full Location History</h3>
+                    <div class="filter-controls" style="display: flex; gap: 10px; margin: 0; padding: 0; box-shadow: none; background: transparent; border: none;">
+                        <button id="showAllBtn" class="refresh-btn" style="background-color: #333;"><i class="bi bi-list-ul" aria-hidden="true" style="margin-right: 4px;"></i> Show All</button>
                         <button id="refreshMapBtn" class="refresh-btn"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Refresh Data</button>
                     </div>
                 </div>
@@ -167,35 +175,73 @@
             }
         }
 
+        let currentClientFilter = 'all';
+
+        function renderClientList(clientsMap) {
+            const clientsList = document.getElementById('clientsList');
+            const clientCount = document.getElementById('clientCount');
+            const clients = Object.keys(clientsMap).sort();
+            
+            clientCount.textContent = clients.length;
+
+            if (clients.length === 0) {
+                clientsList.innerHTML = '<p class="empty-message">No history available</p>';
+                return;
+            }
+
+            clientsList.innerHTML = '';
+
+            clients.forEach(clientId => {
+                const clientCard = document.createElement('div');
+                clientCard.className = 'client-card';
+                // Highlight if currently filtering this client
+                if (currentClientFilter === clientId && currentClientFilter !== 'all') {
+                    clientCard.style.borderLeft = `4px solid ${getColorForClient(clientId)}`;
+                    clientCard.style.backgroundColor = 'var(--surface-bg-alt)';
+                } else if (currentClientFilter !== 'all') {
+                    clientCard.style.opacity = '0.5';
+                }
+
+                clientCard.innerHTML = `
+                    <div class="client-id" style="color: ${getColorForClient(clientId)};">${escapeHtml(clientsMap[clientId])}</div>
+                    <div class="client-info">
+                        <span>ID: ${clientId}</span>
+                    </div>
+                `;
+                
+                // Add click listener to filter map
+                clientCard.addEventListener('click', () => {
+                    currentClientFilter = clientId;
+                    renderClientList(clientsMap); // Re-render to update highlights
+                    drawHistoryMap(clientId);
+                });
+
+                clientsList.appendChild(clientCard);
+            });
+        }
+
+        // Simple HTML escaper
+        function escapeHtml(unsafe) {
+            return (unsafe || '').replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         function loadHistory() {
             fetch('/api/location_history')
                 .then(res => res.json())
                 .then(data => {
                     allHistoryData = data.history || [];
                     
-                    // Update client select map
-                    const select = document.getElementById('clientSelect');
-                    const currentVal = select.value;
-                    
                     const clientsMap = {};
                     allHistoryData.forEach(d => {
                         clientsMap[d.client_id] = d.device_name || d.client_id;
                     });
-                    const clients = Object.keys(clientsMap).sort();
                     
-                    select.innerHTML = '<option value="all">All Clients</option>';
-                    clients.forEach(c => {
-                        const opt = document.createElement('option');
-                        opt.value = c;
-                        opt.textContent = `${clientsMap[c]} (${c})`;
-                        select.appendChild(opt);
-                    });
-                    
-                    if (clients.includes(currentVal)) {
-                        select.value = currentVal;
-                    }
-
-                    drawHistoryMap(select.value);
+                    renderClientList(clientsMap);
+                    drawHistoryMap(currentClientFilter);
                 })
                 .catch(err => {
                     console.error('Error loading history:', err);
@@ -206,10 +252,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
             loadHistory();
-
-            document.getElementById('clientSelect').addEventListener('change', (e) => {
-                drawHistoryMap(e.target.value);
-            });
 
             document.getElementById('refreshMapBtn').addEventListener('click', (e) => {
                 const btn = e.currentTarget;
@@ -223,29 +265,13 @@
                     .then(data => {
                         allHistoryData = data.history || [];
                         
-                        // Update client select map
-                        const select = document.getElementById('clientSelect');
-                        const currentVal = select.value;
-                        
                         const clientsMap = {};
                         allHistoryData.forEach(d => {
                             clientsMap[d.client_id] = d.device_name || d.client_id;
                         });
-                        const clients = Object.keys(clientsMap).sort();
                         
-                        select.innerHTML = '<option value="all">All Clients</option>';
-                        clients.forEach(c => {
-                            const opt = document.createElement('option');
-                            opt.value = c;
-                            opt.textContent = `${clientsMap[c]} (${c})`;
-                            select.appendChild(opt);
-                        });
-                        
-                        if (clients.includes(currentVal)) {
-                            select.value = currentVal;
-                        }
-
-                        drawHistoryMap(select.value);
+                        renderClientList(clientsMap);
+                        drawHistoryMap(currentClientFilter);
                     })
                     .catch(err => {
                         console.error('Error loading history:', err);
@@ -256,6 +282,17 @@
                     btn.classList.remove('is-loading');
                     btn.disabled = false;
                 });
+            });
+            
+            // Show All button resetting
+            document.getElementById('showAllBtn').addEventListener('click', () => {
+                currentClientFilter = 'all';
+                const clientsMap = {};
+                allHistoryData.forEach(d => {
+                    clientsMap[d.client_id] = d.device_name || d.client_id;
+                });
+                renderClientList(clientsMap);
+                drawHistoryMap('all');
             });
         });
     </script>
