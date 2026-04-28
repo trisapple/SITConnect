@@ -203,7 +203,8 @@
                 }
 
                 clientCard.innerHTML = `
-                    <div class="client-id" style="color: ${getColorForClient(clientId)};">${escapeHtml(clientsMap[clientId])}</div>
+                    <div class="client-id" style="color: ${getColorForClient(clientId)};">${escapeHtml(clientsMap[clientId].name)}</div>
+                    ${clientsMap[clientId].email ? `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-envelope"></i> ${escapeHtml(clientsMap[clientId].email)}</div>` : ''}
                     <div class="client-info">
                         <span>ID: ${clientId}</span>
                     </div>
@@ -237,7 +238,10 @@
                     
                     const clientsMap = {};
                     allHistoryData.forEach(d => {
-                        clientsMap[d.client_id] = d.device_name || d.client_id;
+                        clientsMap[d.client_id] = {
+                            name: d.device_name || d.client_id,
+                            email: d.email || ''
+                        };
                     });
                     
                     renderClientList(clientsMap);
@@ -267,7 +271,10 @@
                         
                         const clientsMap = {};
                         allHistoryData.forEach(d => {
-                            clientsMap[d.client_id] = d.device_name || d.client_id;
+                            clientsMap[d.client_id] = {
+                                name: d.device_name || d.client_id,
+                                email: d.email || ''
+                            };
                         });
                         
                         renderClientList(clientsMap);
@@ -289,7 +296,10 @@
                 currentClientFilter = 'all';
                 const clientsMap = {};
                 allHistoryData.forEach(d => {
-                    clientsMap[d.client_id] = d.device_name || d.client_id;
+                    clientsMap[d.client_id] = {
+                        name: d.device_name || d.client_id,
+                        email: d.email || ''
+                    };
                 });
                 renderClientList(clientsMap);
                 drawHistoryMap('all');

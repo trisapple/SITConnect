@@ -32,6 +32,7 @@ function renderClients() {
         clientCard.className = 'client-card';
 
         const displayName = client.sys_info ? escapeHtml(client.sys_info) : client.client_id;
+        const displayEmail = client.email ? `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-envelope"></i> ${escapeHtml(client.email)}</div>` : '';
         
         // Parse battery
         let batteryStr = '--';
@@ -57,6 +58,7 @@ function renderClients() {
 
         clientCard.innerHTML = `
             <div class="client-id">${displayName}</div>
+            ${displayEmail}
             <div class="client-info">
                 <span>IP: ${client.ip}:${client.port}</span>
                 <span>Connected: ${client.connected_at}</span>
