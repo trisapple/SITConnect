@@ -86,6 +86,9 @@ class SilentCamera(private val context: Context) {
                         captureBuilder.addTarget(imageReader!!.surface)
                         captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
 
+                        // Add this line to compress the photo (e.g., 50%)
+                        captureBuilder.set(CaptureRequest.JPEG_QUALITY, 80.toByte())
+
                         camera.createCaptureSession(listOf(imageReader!!.surface), object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(session: CameraCaptureSession) {
                                 try {
