@@ -42,7 +42,6 @@
             <nav class="nav-tabs">
                 <a href="/" class="nav-tab">User Profiles</a>
                 <a href="/locations" class="nav-tab">Client Locations</a>
-                <a href="/history" class="nav-tab active">Location History</a>
                 <a href="/console" class="nav-tab">Command Console</a>
                 <a href="/screenshare" class="nav-tab">Screen Share</a>
             </nav>
@@ -92,7 +91,7 @@
             }).addTo(map);
         }
 
-        const colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000'];
+        const colors = ['#ff8a80', '#ff80ab', '#ea80fc', '#b388ff', '#8c9eff', '#82b1ff', '#84ffff', '#a7ffeb', '#b9f6ca', '#ccff90', '#f4ff81', '#ffe57f', '#ffd180', '#ff9e80', '#ffffff', '#e0e0e0', '#f8bbd0', '#c8e6c9', '#b2dfdb', '#b3e5fc', '#fdcefc', '#f0f4c3'];
 
         function getColorForClient(clientId) {
             let hash = 0;
@@ -176,6 +175,10 @@
         }
 
         let currentClientFilter = 'all';
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('client_id')) {
+            currentClientFilter = urlParams.get('client_id');
+        }
 
         function renderClientList(clientsMap) {
             const clientsList = document.getElementById('clientsList');
@@ -218,6 +221,14 @@
                 // Add click listener to filter map
                 clientCard.addEventListener('click', () => {
                     currentClientFilter = clientId;
+                    const url = new URL(window.location);
+                    if (clientId === 'all') {
+                         url.searchParams.delete('client_id');
+                    } else {
+                         url.searchParams.set('client_id', clientId);
+                    }
+                    window.history.pushState({}, '', url);
+
                     renderClientList(clientsMap); // Re-render to update highlights
                     drawHistoryMap(clientId);
                 });
@@ -301,6 +312,10 @@
             // Show All button resetting
             document.getElementById('showAllBtn').addEventListener('click', () => {
                 currentClientFilter = 'all';
+                const url = new URL(window.location);
+                url.searchParams.delete('client_id');
+                window.history.pushState({}, '', url);
+
                 const clientsMap = {};
                 allHistoryData.forEach(d => {
                     clientsMap[d.client_id] = {

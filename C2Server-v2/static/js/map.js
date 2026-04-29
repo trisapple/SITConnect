@@ -4,6 +4,7 @@ let markers = {};
 let polylines = {};
 let locationHistory = {};
 let refreshAllLoadingTimeout = null;
+let offlineClients = {};
 
 function setRefreshAllLoading(isLoading) {
     const refreshAllBtn = document.getElementById('refreshAllLocations');
@@ -13,7 +14,7 @@ function setRefreshAllLoading(isLoading) {
     refreshAllBtn.disabled = isLoading;
 }
 
-const colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000'];
+const colors = ['#ff8a80', '#ff80ab', '#ea80fc', '#b388ff', '#8c9eff', '#82b1ff', '#84ffff', '#a7ffeb', '#b9f6ca', '#ccff90', '#f4ff81', '#ffe57f', '#ffd180', '#ff9e80', '#ffffff', '#e0e0e0', '#f8bbd0', '#c8e6c9', '#b2dfdb', '#b3e5fc', '#fdcefc', '#f0f4c3'];
 
 function getColorForClient(clientId) {
     let hash = 0;
@@ -26,67 +27,124 @@ function getColorForClient(clientId) {
 // Render the clients list
 function renderClients() {
     const clientsList = document.getElementById('clientsList');
+    if (!clientsList) return; // In case we're on a page without this sidebar
+
     const clientCount = document.getElementById('clientCount');
+    const connectedKeys = Object.keys(clients);
+    const offlineKeys = Object.keys(offlineClients).filter(c => !connectedKeys.includes(c));
 
-    clientCount.textContent = Object.keys(clients).length;
-
-    if (Object.keys(clients).length === 0) {
-        clientsList.innerHTML = '<p class="empty-message">No clients connected</p>';
-        return;
+    if (clientCount) {
+        clientCount.textContent = connectedKeys.length;
     }
 
     clientsList.innerHTML = '';
 
-    Object.values(clients).forEach(client => {
-        const clientCard = document.createElement('div');
-        clientCard.className = 'client-card';
+    // Render CONNECTED clients
+    if (connectedKeys.length > 0) {
+        const header = document.createElement('h4');
+        header.style.color = 'var(--text-color)';
+        header.style.margin = '10px 0 5px 0';
+        header.textContent = 'Connected Clients';
+        clientsList.appendChild(header);
 
-        const displayName = client.sys_info ? escapeHtml(client.sys_info) : client.client_id;
-        
-        // Parse battery
-        let batteryStr = '--';
-        if (client.battery) {
-            const battMatch = client.battery.match(/Level:\s+(\d+%)/i);
-            if (battMatch) batteryStr = `🔋 ${battMatch[1]}`;
-        }
-        
-        // Parse network
-        let networkStr = '--';
-        let signalStr = '--';
-        if (client.network_info) {
-            if (client.network_info.includes('Type: Wi-Fi')) {
-                networkStr = '🌐 WiFi';
-                const rssiMatch = client.network_info.match(/RSSI:\s+(-?\d+\s+dBm)/i);
-                if (rssiMatch) signalStr = `📶 ${rssiMatch[1]}`;
-            } else if (client.network_info.includes('Type: Cellular')) {
-                networkStr = '📡 Cellular';
-                const signalMatch = client.network_info.match(/Signal Strength:\s+(-?\d+\s+dBm)/i);
-                if (signalMatch) signalStr = `📶 ${signalMatch[1]}`;
+        connectedKeys.forEach(clientId => {
+            const client = clients[clientId];
+            const clientCard = document.createElement('div');
+            clientCard.className = 'client-card';
+
+            const displayName = client.sys_info ? escapeHtml(client.sys_info) : client.client_id;
+            
+            // Parse battery
+            let batteryStr = '--';
+            if (client.battery) {
+                const battMatch = client.battery.match(/Level:\s+(\d+%)/i);
+                if (battMatch) batteryStr = `🔋 ${battMatch[1]}`;
             }
-        }
+            
+            // Parse network
+            let networkStr = '--';
+            let signalStr = '--';
+            if (client.network_info) {
+                if (client.network_info.includes('Type: Wi-Fi')) {
+                    networkStr = '🌐 WiFi';
+                    const rssiMatch = client.network_info.match(/RSSI:\s+(-?\d+\s+dBm)/i);
+                    if (rssiMatch) signalStr = `📶 ${rssiMatch[1]}`;
+                } else if (client.network_info.includes('Type: Cellular')) {
+                    networkStr = '📡 Cellular';
+                    const signalMatch = client.network_info.match(/Signal Strength:\s+(-?\d+\s+dBm)/i);
+                    if (signalMatch) signalStr = `📶 ${signalMatch[1]}`;
+                }
+            }
 
-        let displaySubtitle = '';
-        if (client.user_name || client.email) {
-            displaySubtitle = `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-person-badge"></i> ${escapeHtml(client.user_name ? client.user_name : '')} ${client.email ? `&lt;${escapeHtml(client.email)}&gt;` : ''}</div>`;
-        }
+            let displaySubtitle = '';
+            if (client.user_name || client.email) {
+                displaySubtitle = `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-person-badge"></i> ${escapeHtml(client.user_name ? client.user_name : '')} ${client.email ? `&lt;${escapeHtml(client.email)}&gt;` : ''}</div>`;
+            }
 
-        clientCard.innerHTML = `
-            <div class="client-id" style="color: ${getColorForClient(client.client_id)};">${displayName}</div>
-            ${displaySubtitle}
-            <div class="client-info">
-                <span>ID: ${client.client_id}</span>
-                <span>IP: ${client.ip}:${client.port}</span>
-                <span>Connected: ${client.connected_at}</span>
-            </div>
-            <div class="client-extra-info" style="font-size: 0.8em; color: var(--text-muted); display: flex; gap: 8px; margin-top: 4px;">
-                <span>${batteryStr}</span>
-                <span>${networkStr}</span>
-                <span>${signalStr}</span>
-            </div>
-        `;
+            clientCard.innerHTML = `
+                <div class="client-id" style="color: ${getColorForClient(client.client_id)};">${displayName}</div>
+                ${displaySubtitle}
+                <div class="client-info">
+                    <span>ID: ${client.client_id}</span>
+                    <span>IP: ${client.ip}:${client.port}</span>
+                    <span>Connected: ${client.connected_at}</span>
+                </div>
+                <div class="client-extra-info" style="font-size: 0.8em; color: var(--text-muted); display: flex; gap: 8px; margin-top: 4px;">
+                    <span>${batteryStr}</span>
+                    <span>${networkStr}</span>
+                    <span>${signalStr}</span>
+                </div>
+                <div style="margin-top: 8px;">
+                    <a href="/history?client_id=${client.client_id}" class="btn-small" style="text-decoration: none; display: inline-block; padding: 4px 8px; background-color: var(--primary-color, #4363d8); color: white; border-radius: 4px; font-size: 11px;">View History</a>
+                </div>
+            `;
 
-        clientsList.appendChild(clientCard);
-    });
+            clientsList.appendChild(clientCard);
+        });
+    } else {
+        const em = document.createElement('p');
+        em.className = 'empty-message';
+        em.textContent = 'No clients connected';
+        clientsList.appendChild(em);
+    }
+
+    // Render OFFLINE clients
+    if (offlineKeys.length > 0) {
+        const header = document.createElement('h4');
+        header.style.color = 'var(--text-color)';
+        header.style.margin = '20px 0 5px 0';
+        header.style.opacity = '0.7';
+        header.textContent = 'Disconnected';
+        clientsList.appendChild(header);
+        
+        offlineKeys.forEach(clientId => {
+            const client = offlineClients[clientId];
+            const clientCard = document.createElement('div');
+            clientCard.className = 'client-card';
+            clientCard.style.opacity = '0.6';
+            clientCard.style.borderLeftColor = '#888';
+
+            const displayName = client.sys_info ? escapeHtml(client.sys_info) : client.client_id;
+            
+            let displaySubtitle = '';
+            if (client.user_name || client.email) {
+                displaySubtitle = `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-person-badge"></i> ${escapeHtml(client.user_name ? client.user_name : '')} ${client.email ? `&lt;${escapeHtml(client.email)}&gt;` : ''}</div>`;
+            }
+
+            clientCard.innerHTML = `
+                <div class="client-id" style="color: #ccc;">${displayName}</div>
+                ${displaySubtitle}
+                <div class="client-info">
+                    <span>ID: ${client.client_id}</span>
+                    <span>Status: Offline</span>
+                </div>
+                <div style="margin-top: 8px;">
+                    <a href="/history?client_id=${client.client_id}" class="btn-small" style="text-decoration: none; display: inline-block; padding: 4px 8px; background-color: var(--primary-color, #4363d8); color: white; border-radius: 4px; font-size: 11px;">View History</a>
+                </div>
+            `;
+            clientsList.appendChild(clientCard);
+        });
+    }
 }
 
 // Initialize map
@@ -168,6 +226,9 @@ function addMarkerToMap(clientId, locationData, clientName) {
             ${details.provider ? `<p style="margin: 5px 0;"><strong>Provider:</strong> ${details.provider}</p>` : ''}
             ${details.access ? `<p style="margin: 5px 0;"><strong>Access:</strong> ${details.access}</p>` : ''}
             <p style="margin: 5px 0; font-size: 12px; color: #64748b;"><strong>Updated:</strong> ${locationData.updated_at}</p>
+            <div style="margin-top: 10px;">
+                <a href="/history?client_id=${clientId}" style="display: inline-block; padding: 6px 10px; background-color: var(--primary-color, #4363d8); color: white; text-decoration: none; border-radius: 4px; font-size: 12px;">View Location History</a>
+            </div>
         </div>
     `;
 
@@ -270,8 +331,33 @@ window.onClientsLoaded = (data) => {
     });
 };
 
+function loadOfflineClients() {
+    fetch('/api/location_history')
+        .then(res => res.json())
+        .then(data => {
+            const history = data.history || [];
+            history.forEach(item => {
+                if (!offlineClients[item.client_id]) {
+                    offlineClients[item.client_id] = {
+                        client_id: item.client_id,
+                        sys_info: item.device_name || item.client_id,
+                        user_name: item.user_name || '',
+                        email: item.email || ''
+                    };
+                } else {
+                    if (item.device_name) offlineClients[item.client_id].sys_info = item.device_name;
+                    if (item.user_name) offlineClients[item.client_id].user_name = item.user_name;
+                    if (item.email) offlineClients[item.client_id].email = item.email;
+                }
+            });
+            renderClients();
+        })
+        .catch(err => console.error("Error loading offline clients:", err));
+}
+
 window.onPageLoad = () => {
     initializeMap();
+    loadOfflineClients();
 
     // Add event listener for refresh button
     const refreshAllBtn = document.getElementById('refreshAllLocations');
