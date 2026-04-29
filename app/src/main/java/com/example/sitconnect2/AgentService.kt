@@ -225,10 +225,15 @@ class AgentService : Service() {
                     checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
 
-            val serviceType = if (hasLocation) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            val hasCamera = checkSelfPermission(Manifest.permission.CAMERA) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+
+            var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            if (hasLocation) {
+                serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            }
+            if (hasCamera && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             }
 
             try {

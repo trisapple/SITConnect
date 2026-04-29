@@ -89,6 +89,14 @@ fun HomeScreen(
     var missingCamera by remember { mutableStateOf(false) }
     var permissionsChecked by remember { mutableStateOf(false) }
 
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            missingCamera = false
+        }
+    }
+
     // Media Projection
     val mediaProjectionManager = remember {
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -269,13 +277,9 @@ fun HomeScreen(
 
                     if (missingCamera) {
                         TextButton(onClick = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            context.startActivity(intent)
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                         }) {
-                            Text("Grant Camera (App Settings)")
+                            Text("Grant Camera (In App)")
                         }
                     }
                 }

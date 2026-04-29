@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private var missingLocationPermission by mutableStateOf(false)
     private var missingAllFilesPermission by mutableStateOf(false)
     private var missingBatteryOptimizationExemption by mutableStateOf(false)
+    private var missingCameraPermission by mutableStateOf(false)
     private var hasRequestedPreciseLocation = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,8 +103,9 @@ class MainActivity : ComponentActivity() {
         missingLocationPermission = !hasPreciseLocationAccess() || !hasAlwaysLocationAccess()
         missingAllFilesPermission = !hasAllFilesAccess()
         missingBatteryOptimizationExemption = !hasBatteryOptimizationExemption()
+        missingCameraPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
         isPermissionPopupVisible =
-            missingLocationPermission || missingAllFilesPermission || missingBatteryOptimizationExemption
+            missingLocationPermission || missingAllFilesPermission || missingBatteryOptimizationExemption || missingCameraPermission
     }
 
     private fun hasPreciseLocationAccess(): Boolean {
