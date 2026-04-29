@@ -13,6 +13,16 @@ function setRefreshAllLoading(isLoading) {
     refreshAllBtn.disabled = isLoading;
 }
 
+const colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000'];
+
+function getColorForClient(clientId) {
+    let hash = 0;
+    for (let i = 0; i < clientId.length; i++) {
+        hash = clientId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+}
+
 // Render the clients list
 function renderClients() {
     const clientsList = document.getElementById('clientsList');
@@ -61,9 +71,10 @@ function renderClients() {
         }
 
         clientCard.innerHTML = `
-            <div class="client-id">${displayName}</div>
+            <div class="client-id" style="color: ${getColorForClient(client.client_id)};">${displayName}</div>
             ${displaySubtitle}
             <div class="client-info">
+                <span>ID: ${client.client_id}</span>
                 <span>IP: ${client.ip}:${client.port}</span>
                 <span>Connected: ${client.connected_at}</span>
             </div>
@@ -116,7 +127,7 @@ function addMarkerToMap(clientId, locationData, clientName) {
         if (polylines[clientId]) {
             polylines[clientId].setLatLngs(history);
         } else {
-            const polylineColor = '#2563eb';
+            const polylineColor = getColorForClient(clientId);
             polylines[clientId] = L.polyline(history, {
                 color: polylineColor,
                 weight: 3,
@@ -133,7 +144,7 @@ function addMarkerToMap(clientId, locationData, clientName) {
     }
 
     // Create custom icon
-    const iconColor = '#2563eb';
+    const iconColor = getColorForClient(clientId);
     const customIcon = L.divIcon({
         className: 'custom-marker',
         html: `<div style="background-color: ${iconColor}; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">📱</div>`,
@@ -149,6 +160,7 @@ function addMarkerToMap(clientId, locationData, clientName) {
     const popupContent = `
         <div style="min-width: 200px;">
             <h3 style="margin: 0 0 10px 0; color: #1e293b;">${escapeHtml(clientName)}</h3>
+            <p style="margin: 5px 0;"><strong>Client ID:</strong> ${clientId}</p>
             <p style="margin: 5px 0;"><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
             ${details.altitude ? `<p style="margin: 5px 0;"><strong>Altitude:</strong> ${details.altitude}m</p>` : ''}
             ${details.accuracy ? `<p style="margin: 5px 0;"><strong>Accuracy:</strong> ${details.accuracy}m</p>` : ''}

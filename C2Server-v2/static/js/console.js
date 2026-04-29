@@ -55,6 +55,7 @@ function renderClients() {
             <div class="client-id">${displayName}</div>
             ${displaySubtitle}
             <div class="client-info">
+                <span>ID: ${client.client_id}</span>
                 <span>IP: ${client.ip}:${client.port}</span>
                 <span>Connected: ${client.connected_at}</span>
             </div>
