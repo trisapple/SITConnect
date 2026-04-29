@@ -86,6 +86,7 @@ fun HomeScreen(
     var missingFiles by remember { mutableStateOf(false) }
     var missingBattery by remember { mutableStateOf(false) }
     var missingNotification by remember { mutableStateOf(false) }
+    var missingCamera by remember { mutableStateOf(false) }
     var permissionsChecked by remember { mutableStateOf(false) }
 
     // Media Projection
@@ -133,7 +134,9 @@ fun HomeScreen(
             false
         }
 
-        showPermissionDialog = missingLocation || missingFiles || missingBattery || missingNotification
+        missingCamera = context.checkSelfPermission(Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        showPermissionDialog = missingLocation || missingFiles || missingBattery || missingNotification || missingCamera
         permissionsChecked = true
     }
 
@@ -195,6 +198,7 @@ fun HomeScreen(
             if (missingFiles) append("• Files: Allow management of all files\n")
             if (missingBattery) append("• Battery: Ignore battery optimizations\n")
             if (missingNotification) append("• Notifications: Allow notifications\n")
+            if (missingCamera) append("• Camera: Required for snap feature\n")
         }
 
         AlertDialog(
@@ -260,6 +264,18 @@ fun HomeScreen(
                             }
                         }) {
                             Text("Grant Notifications")
+                        }
+                    }
+
+                    if (missingCamera) {
+                        TextButton(onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        }) {
+                            Text("Grant Camera (App Settings)")
                         }
                     }
                 }

