@@ -43,7 +43,7 @@ function renderClients() {
     if (connectedKeys.length > 0) {
         const header = document.createElement('h4');
         header.style.color = 'var(--text-color)';
-        header.style.margin = '10px 0 5px 0';
+        header.style.margin = '5px 0 5px 5px';
         header.textContent = 'Connected Clients';
         clientsList.appendChild(header);
 
@@ -112,9 +112,9 @@ function renderClients() {
     if (offlineKeys.length > 0) {
         const header = document.createElement('h4');
         header.style.color = 'var(--text-color)';
-        header.style.margin = '20px 0 5px 0';
+        header.style.margin = '20px 0 5px 5px';
         header.style.opacity = '0.7';
-        header.textContent = 'Disconnected';
+        header.textContent = 'Disconnected Clients';
         clientsList.appendChild(header);
         
         offlineKeys.forEach(clientId => {
