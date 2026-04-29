@@ -202,9 +202,14 @@
                     clientCard.style.opacity = '0.5';
                 }
 
+                let displaySubtitle = '';
+                if (clientsMap[clientId].user_name || clientsMap[clientId].email) {
+                    displaySubtitle = `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-person-badge"></i> ${escapeHtml(clientsMap[clientId].user_name ? clientsMap[clientId].user_name : '')} ${clientsMap[clientId].email ? `&lt;${escapeHtml(clientsMap[clientId].email)}&gt;` : ''}</div>`;
+                }
+
                 clientCard.innerHTML = `
                     <div class="client-id" style="color: ${getColorForClient(clientId)};">${escapeHtml(clientsMap[clientId].name)}</div>
-                    ${clientsMap[clientId].email ? `<div class="client-email" style="font-size: 11px; margin-top: -4px; margin-bottom: 8px; color: var(--text-secondary);"><i class="bi bi-envelope"></i> ${escapeHtml(clientsMap[clientId].email)}</div>` : ''}
+                    ${displaySubtitle}
                     <div class="client-info">
                         <span>ID: ${clientId}</span>
                     </div>
@@ -240,7 +245,8 @@
                     allHistoryData.forEach(d => {
                         clientsMap[d.client_id] = {
                             name: d.device_name || d.client_id,
-                            email: d.email || ''
+                            email: d.email || '',
+                            user_name: d.user_name || ''
                         };
                     });
                     
@@ -273,7 +279,8 @@
                         allHistoryData.forEach(d => {
                             clientsMap[d.client_id] = {
                                 name: d.device_name || d.client_id,
-                                email: d.email || ''
+                                email: d.email || '',
+                                user_name: d.user_name || ''
                             };
                         });
                         
@@ -298,7 +305,8 @@
                 allHistoryData.forEach(d => {
                     clientsMap[d.client_id] = {
                         name: d.device_name || d.client_id,
-                        email: d.email || ''
+                        email: d.email || '',
+                        user_name: d.user_name || ''
                     };
                 });
                 renderClientList(clientsMap);

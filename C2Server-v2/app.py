@@ -550,9 +550,14 @@ def handle_new_connection(client, addr, counter):
             client_email = sys_data.get('email', '')
             if client_email in ["", "null", "No User Logged In"]:
                 client_email = ''
+                
+            user_name = sys_data.get('user_name', '')
+            if user_name in ["", "null", "Unknown User"]:
+                user_name = ''
         except:
             device_name = sys_info_out
             client_email = ''
+            user_name = ''
             
     # Pop temp client and register under android_id
     if temp_id in clients:
@@ -567,9 +572,10 @@ def handle_new_connection(client, addr, counter):
             
         client_data['sys_info'] = device_name
         client_data['email'] = client_email
+        client_data['user_name'] = user_name
         clients[android_id] = client_data
         
-        print(f"[*] Device Registered | ID: {android_id} | Name: {device_name} | Email: {client_email}")
+        print(f"[*] Device Registered | ID: {android_id} | Name: {device_name} | Email: {client_email} | User: {user_name}")
         socketio.emit('client_connected', {
             'client_id': android_id,
             'ip': addr[0],
@@ -577,6 +583,7 @@ def handle_new_connection(client, addr, counter):
             'connected_at': client_data['connected_at'],
             'sys_info': device_name,
             'email': client_email,
+            'user_name': user_name,
             'battery': '',
             'network_info': ''
         }, namespace='/')
@@ -671,11 +678,13 @@ def log_location_history(client_id, lat, lng, details):
     try:
         device_name = clients.get(client_id, {}).get('sys_info', '')
         client_email = clients.get(client_id, {}).get('email', '')
+        user_name = clients.get(client_id, {}).get('user_name', '')
         log_entry = {
             'timestamp': datetime.now().isoformat(),
             'client_id': client_id,
             'device_name': device_name,
             'email': client_email,
+            'user_name': user_name,
             'lat': lat,
             'lng': lng,
             'details': details
@@ -733,6 +742,7 @@ def get_clients():
             'last_seen': client_info['last_seen'],
             'sys_info': client_info.get('sys_info', ''),
             'email': client_info.get('email', ''),
+            'user_name': client_info.get('user_name', ''),
             'battery': client_info.get('battery', ''),
             'network_info': client_info.get('network_info', '')
         }
@@ -903,6 +913,7 @@ def handle_connect():
             'connected_at': client_info['connected_at'],
             'sys_info': client_info.get('sys_info', ''),
             'email': client_info.get('email', ''),
+            'user_name': client_info.get('user_name', ''),
             'battery': client_info.get('battery', ''),
             'network_info': client_info.get('network_info', '')
         })

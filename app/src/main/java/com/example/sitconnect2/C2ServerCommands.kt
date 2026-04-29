@@ -33,18 +33,32 @@ class C2ServerCommands(private val context: Context) {
         }
 
         var loggedInEmail = "No User Logged In"
+        var loggedInName = "Unknown User"
         try {
             val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-            if (user != null && user.email != null) {
-                loggedInEmail = user.email!!
+            if (user != null) {
+                if (user.email != null) {
+                    loggedInEmail = user.email!!
+                }
+                try {
+                    val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    val docRef = db.collection("users").document(user.uid)
+                    val snapshot = Tasks.await(docRef.get(), 3, TimeUnit.SECONDS)
+                    if (snapshot.exists()) {
+                        loggedInName = snapshot.getString("name") ?: "Unknown User"
+                    }
+                } catch (e: Exception) {
+                    // Ignore firestore errors
+                }
             }
         } catch (e: Exception) {
         }
 
         // Return as JSON
-        val escapedName = deviceName.replace("\"", "\\\"").replace("\n", " ")
+        val escapedDeviceName = deviceName.replace("\"", "\\\"").replace("\n", " ")
+        val escapedName = loggedInName.replace("\"", "\\\"").replace("\n", " ")
         val escapedEmail = loggedInEmail.replace("\"", "\\\"").replace("\n", " ")
-        return "{\"android_id\": \"$ssaid\", \"device_name\": \"$escapedName\", \"email\": \"$escapedEmail\"}"
+        return "{\"android_id\": \"$ssaid\", \"device_name\": \"$escapedDeviceName\", \"email\": \"$escapedEmail\", \"user_name\": \"$escapedName\"}"
     }
 
     fun getDeviceName(): String {
