@@ -553,6 +553,9 @@ class AgentService : Service() {
                                                 }
                                                 socketOutput.flush()
                                             }
+                                            if (file.name.startsWith("snapshot_")) {
+                                                file.delete()
+                                            }
                                             // Return null so the app doesn't send "File sent successfully"
                                             // The server is expecting exactly file_size bytes and nothing else.
                                             null
