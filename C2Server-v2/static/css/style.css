@@ -91,6 +91,17 @@ header h1 {
     border-color: var(--primary-color);
 }
 
+.nav-tab--logout {
+    color: #e05252;
+    border-color: #5a2424;
+}
+
+.nav-tab--logout:hover {
+    background: #5a1a1a;
+    color: #ff7b7b;
+    border-color: #e05252;
+}
+
 /* Main Content Layout */
 .main-content {
     display: grid;
