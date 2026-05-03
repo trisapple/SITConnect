@@ -874,6 +874,64 @@ def get_locations():
             })
     return jsonify({'locations': locations})
 
+@app.route('/api/exfil_logs')
+@login_required
+def get_exfil_logs():
+    """Return raw exfil log entries in reverse chronological order."""
+    logs = []
+    if os.path.exists(LOG_FILE):
+        try:
+            with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            logs.append(json.loads(line))
+                        except Exception:
+                            pass
+        except Exception as e:
+            print(f"[!] Error reading exfil logs: {e}")
+    logs.reverse()
+    return jsonify({'logs': logs})
+
+@app.route('/api/exfil_logs', methods=['DELETE'])
+@login_required
+def delete_exfil_log():
+    """Delete a single log entry identified by received_at."""
+    received_at = (request.get_json(force=True) or {}).get('received_at')
+    if not received_at:
+        return jsonify({'error': 'received_at is required'}), 400
+
+    if not os.path.exists(LOG_FILE):
+        return jsonify({'error': 'Log file not found'}), 404
+
+    kept = []
+    deleted = 0
+    try:
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                    if entry.get('received_at') == received_at:
+                        deleted += 1
+                        continue
+                except Exception:
+                    pass
+                kept.append(stripped)
+
+        with open(LOG_FILE, 'w', encoding='utf-8') as f:
+            for line in kept:
+                f.write(line + '\n')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if deleted == 0:
+        return jsonify({'error': 'Entry not found'}), 404
+    return jsonify({'success': True})
+
 @app.route('/api/location_history')
 @login_required
 def get_location_history():
