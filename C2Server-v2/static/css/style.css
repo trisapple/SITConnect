@@ -1144,3 +1144,43 @@ footer {
     color: #fff;
 }
 .log-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#historyMap {
+    width: 100%;
+    flex: 1;
+    background: var(--dark-bg);
+    min-height: 500px;
+}
+
+.filter-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    background: transparent;
+    border: none;
+}
+
+select {
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--surface-bg-alt);
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+#showAllBtn {
+    background-color: #333;
+}
+
+#showAllBtn .bi {
+    margin-right: 4px;
+}
