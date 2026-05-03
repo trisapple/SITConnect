@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer - SIT Connect Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        .explorer-panel {
+            background: var(--darker-bg);
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 20px;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--border-color);
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            flex-wrap: wrap;
+            min-height: 42px;
+        }
+
+        .breadcrumb-part {
+            color: var(--primary-color);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.15s;
+        }
+
+        .breadcrumb-part:hover {
+            background: rgba(37, 99, 235, 0.15);
+        }
+
+        .breadcrumb-sep {
+            color: var(--text-secondary);
+            user-select: none;
+        }
+
+        .breadcrumb-current {
+            color: var(--text-primary);
+            font-weight: 600;
+            padding: 2px 6px;
+        }
+
+        .explorer-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: var(--light-bg);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .toolbar-btn {
+            padding: 6px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .toolbar-btn:hover:not(:disabled) {
+            border-color: var(--primary-color);
+            background: rgba(37, 99, 235, 0.15);
+        }
+
+        .toolbar-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .path-input {
+            flex: 1;
+            min-width: 0;
+            background: var(--dark-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .path-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .path-input:disabled {
+            opacity: 0.4;
+        }
+
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px;
+        }
+
+        .file-entry {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 14px;
+            border-radius: 6px;
+            transition: background 0.12s;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.25);
+            cursor: default;
+        }
+
+        .file-entry:last-child {
+            border-bottom: none;
+        }
+
+        .file-entry:hover {
+            background: var(--light-bg);
+        }
+
+        .file-type-dir {
+            cursor: pointer;
+        }
+
+        .file-icon {
+            font-size: 18px;
+            width: 26px;
+            text-align: center;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .file-name {
+            flex: 1;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            word-break: break-all;
+            min-width: 0;
+        }
+
+        .file-type-dir .file-name {
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .file-type-file .file-name {
+            color: var(--text-primary);
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .file-action-btn {
+            padding: 3px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--dark-bg);
+            color: var(--text-secondary);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .file-action-btn:hover {
+            border-color: var(--primary-color);
+            color: var(--text-primary);
+        }
+
+        .file-action-btn.download-btn:hover {
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .explorer-status {
+            padding: 8px 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: var(--darker-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 36px;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .explorer-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .explorer-empty p {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .download-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--dark-bg);
+            border: 1px solid var(--success-color);
+            border-radius: 8px;
+            padding: 14px 36px 14px 18px;
+            max-width: 340px;
+            box-shadow: var(--shadow);
+            z-index: 200;
+            animation: slideIn 0.2s ease;
+            font-size: 13px;
+        }
+
+        .download-notification a {
+            color: var(--success-color);
+            text-decoration: underline;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(110%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .notification-close {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+        }
+
+        .notification-close:hover {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .explorer-toolbar {
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 8px 10px;
+            }
+
+            .path-input {
+                flex: 1 1 100%;
+                width: 100%;
+            }
+
+            .file-entry {
+                padding: 8px 10px;
+            }
+
+            .file-action-btn {
+                padding: 3px 8px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SIT Connect Dashboard</h1>
+            <nav class="nav-tabs">
+                <a href="/" class="nav-tab">User Profiles</a>
+                <a href="/locations" class="nav-tab">Client Locations</a>
+                <a href="/console" class="nav-tab">Command Console</a>
+                <a href="/file_explorer" class="nav-tab active">File Explorer</a>
+                <a href="/screenshare" class="nav-tab">Screen Share</a>
+                <a href="/logout" class="nav-tab nav-tab--logout">Logout</a>
+            </nav>
+        </header>
+
+        <div class="main-content">
+            <!-- Client Selection Sidebar -->
+            <aside class="clients-panel-sidebar">
+                <div class="panel-header">
+                    <h2>Select Client</h2>
+                    <span id="clientCount" class="badge">0</span>
+                </div>
+                <div id="clientsList" class="clients-list">
+                    <p class="empty-message">No clients connected</p>
+                </div>
+            </aside>
+
+            <!-- File Explorer Panel -->
+            <main class="explorer-panel">
+                <div class="panel-header">
+                    <h2>File Explorer</h2>
+                    <div id="selectedClient" class="selected-client">No client selected</div>
+                </div>
+
+                <div class="breadcrumb" id="breadcrumb">
+                    <span style="color: var(--text-secondary); font-size: 13px;">Select a client to browse files</span>
+                </div>
+
+                <div class="explorer-toolbar">
+                    <button id="backBtn" class="toolbar-btn" disabled title="Go up one level">&#8593; Up</button>
+                    <button id="homeBtn" class="toolbar-btn" disabled title="Go to /sdcard/">/sdcard/</button>
+                    <input type="text" id="pathInput" class="path-input" placeholder="/sdcard/" disabled>
+                    <button id="goBtn" class="toolbar-btn" disabled>Go</button>
+                    <button id="refreshBtn" class="toolbar-btn" disabled title="Refresh current directory">&#8635;</button>
+                </div>
+
+                <div class="file-list" id="fileList">
+                    <div class="explorer-empty">
+                        <p>Select a client from the left panel to browse device files.</p>
+                    </div>
+                </div>
+
+                <div class="explorer-status">
+                    <span id="statusText">Ready</span>
+                </div>
+            </main>
+        </div>
+
+        <footer>
+            <p>SIT Connect | By P2 Group 25 (Tristan, Bryan, Xiang Quan, Nathanael, Jarrett, Hong Liang, Chin Liong)</p>
+        </footer>
+    </div>
+
+    <div id="notifications"></div>
+
+    <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/file_explorer.js') }}"></script>
+</body>
+</html>

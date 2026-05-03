@@ -555,6 +555,12 @@ def screenshare():
     """Screen share page"""
     return render_template('screenshare.html')
 
+@app.route('/file_explorer')
+@login_required
+def file_explorer():
+    """File explorer page"""
+    return render_template('file_explorer.html')
+
 
 def handle_new_connection(client, addr, counter):
     """Handle the initial handshake to get Android ID before registering fully."""
