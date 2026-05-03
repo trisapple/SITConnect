@@ -277,11 +277,15 @@ function handleCommandResponse(data) {
             showDownloadNotification(data.filename, false);
             setLoading(false, `Downloaded: ${data.filename}`);
         } else {
-            // Intermediate status message (e.g. "starting recursive folder download")
-            // Keep loading — the real completion event arrives later with folder_download:true
-            document.getElementById('statusText').textContent = data.response || 'Downloading…';
-            // Re-register pending for the follow-up event
-            pendingDownload = data.command;
+            const responseText = data.response || '';
+            const isErrorResponse = /error|not found|failed|permission denied|no such/i.test(responseText);
+            if (isErrorResponse) {
+                setLoading(false, `Download failed: ${responseText}`);
+            } else {
+                // Intermediate status — a folder_download:true event will arrive later
+                document.getElementById('statusText').textContent = responseText || 'Downloading…';
+                pendingDownload = data.command;
+            }
         }
         return;
     }
