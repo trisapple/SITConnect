@@ -160,6 +160,7 @@
                             <p style="margin: 3px 0; font-size: 12px;"><strong>Lat:</strong> ${p.lat}</p>
                             <p style="margin: 3px 0; font-size: 12px;"><strong>Lng:</strong> ${p.lng}</p>
                             ${isLatest ? '<span style="background:var(--primary-color);color:#fff;padding:2px 6px;border-radius:10px;font-size:10px;">Latest Known Location</span>' : ''}
+                            <br><button onclick="deleteHistoryEntry(${JSON.stringify(p.timestamp)})" style="margin-top:8px;padding:3px 8px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;"><i class="bi bi-trash"></i> Delete Entry</button>
                         </div>
                     `;
                     circleMarker.bindPopup(popupContent);
@@ -212,13 +213,25 @@
                 }
 
                 clientCard.innerHTML = `
-                    <div class="client-id" style="color: ${getColorForClient(clientId)};">${escapeHtml(clientsMap[clientId].name)}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div class="client-id" style="color: ${getColorForClient(clientId)};">${escapeHtml(clientsMap[clientId].name)}</div>
+                        <button class="delete-client-btn" data-client-id="${escapeHtml(clientId)}" title="Delete all history for this client" style="background:none;border:none;cursor:pointer;color:#c0392b;font-size:14px;padding:0 2px;line-height:1;"><i class="bi bi-trash"></i></button>
+                    </div>
                     ${displaySubtitle}
                     <div class="client-info">
                         <span>ID: ${clientId}</span>
                     </div>
                 `;
                 
+                // Wire up the trash button without bubbling to the card click handler
+                const deleteBtn = clientCard.querySelector('.delete-client-btn');
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteClientHistory(deleteBtn.dataset.clientId);
+                    });
+                }
+
                 // Add click listener to filter map
                 clientCard.addEventListener('click', () => {
                     currentClientFilter = clientId;
@@ -236,6 +249,45 @@
 
                 clientsList.appendChild(clientCard);
             });
+        }
+
+        function deleteHistoryEntry(timestamp) {
+            if (!confirm('Delete this location entry?')) return;
+            fetch('/api/location_history', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ timestamp })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) loadHistory();
+                else alert('Delete failed: ' + (data.error || 'unknown error'));
+            })
+            .catch(err => alert('Delete failed: ' + err));
+        }
+
+        function deleteClientHistory(clientId) {
+            if (!confirm(`Delete ALL location history for client ${clientId}?`)) return;
+            fetch('/api/location_history', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_id: clientId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    if (currentClientFilter === clientId) {
+                        currentClientFilter = 'all';
+                        const url = new URL(window.location);
+                        url.searchParams.delete('client_id');
+                        window.history.pushState({}, '', url);
+                    }
+                    loadHistory();
+                } else {
+                    alert('Delete failed: ' + (data.error || 'unknown error'));
+                }
+            })
+            .catch(err => alert('Delete failed: ' + err));
         }
 
         // Simple HTML escaper

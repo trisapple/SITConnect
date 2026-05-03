@@ -932,6 +932,50 @@ def delete_exfil_log():
         return jsonify({'error': 'Entry not found'}), 404
     return jsonify({'success': True})
 
+@app.route('/api/location_history', methods=['DELETE'])
+@login_required
+def delete_location_history():
+    """Delete location history entries by timestamp (single) or client_id (all for that client)."""
+    data = request.get_json(force=True) or {}
+    timestamp = data.get('timestamp')
+    client_id = data.get('client_id')
+
+    if not timestamp and not client_id:
+        return jsonify({'error': 'timestamp or client_id is required'}), 400
+
+    if not os.path.exists('location_history.jsonl'):
+        return jsonify({'error': 'Log file not found'}), 404
+
+    kept = []
+    deleted = 0
+    try:
+        with open('location_history.jsonl', 'r') as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                    if timestamp and entry.get('timestamp') == timestamp:
+                        deleted += 1
+                        continue
+                    if client_id and not timestamp and entry.get('client_id') == client_id:
+                        deleted += 1
+                        continue
+                except Exception:
+                    pass
+                kept.append(stripped)
+
+        with open('location_history.jsonl', 'w') as f:
+            for line in kept:
+                f.write(line + '\n')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    if deleted == 0:
+        return jsonify({'error': 'Entry not found'}), 404
+    return jsonify({'success': True, 'deleted': deleted})
+
 @app.route('/api/location_history')
 @login_required
 def get_location_history():
