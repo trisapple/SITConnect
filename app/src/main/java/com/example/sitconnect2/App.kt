@@ -8,6 +8,7 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import kotlin.system.exitProcess
+import com.example.sitconnect2.securitydemo.malicious.RestartReceiver
 
 class App : Application() {
 

@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.securitydemo.malicious
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 

@@ -61,6 +61,15 @@ import com.example.sitconnect2.features.admin.mcreview.presentation.MCReviewScre
 import com.example.sitconnect2.features.calendar.presentation.LPG
 import android.util.Log
 import kotlinx.coroutines.delay
+import com.example.sitconnect2.features.auth.presentation.AuthViewModel
+import com.example.sitconnect2.features.auth.presentation.AuthState
+import com.example.sitconnect2.features.profile.presentation.UserViewModel
+import com.example.sitconnect2.features.profile.presentation.UserDataState
+import com.example.sitconnect2.features.auth.presentation.LoginScreen
+import com.example.sitconnect2.features.onboarding.presentation.OnboardingScreen
+import com.example.sitconnect2.features.home.presentation.HomeScreen
+import com.example.sitconnect2.features.profile.presentation.ProfileScreen
+import com.example.sitconnect2.features.admin.usermanagement.presentation.UserManagementScreen
 
 
 sealed class Screen(val route: String) {

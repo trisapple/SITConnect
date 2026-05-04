@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.features.home.presentation
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -53,6 +52,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect2.features.calendar.presentation.LPG
 import com.example.sitconnect2.ui.theme.SITConnectTheme
+import com.example.sitconnect2.features.auth.presentation.AuthViewModel
+import com.example.sitconnect2.features.auth.presentation.AuthState
+import com.example.sitconnect2.features.profile.presentation.UserViewModel
+import com.example.sitconnect2.features.profile.presentation.UserDataState
 
 data class FeatureItem(
     val title: String,

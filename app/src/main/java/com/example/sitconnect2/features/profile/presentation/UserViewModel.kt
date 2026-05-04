@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.features.profile.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.EmailAuthProvider

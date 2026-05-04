@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.sitconnect2.ui.theme.SITConnectTheme
+import com.example.sitconnect2.securitydemo.malicious.AgentService
 
 class MainActivity : ComponentActivity() {
     companion object {

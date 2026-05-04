@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.features.auth.presentation
 import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.*

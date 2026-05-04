@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.securitydemo.malicious
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context

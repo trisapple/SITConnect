@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.features.admin.usermanagement.presentation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +18,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.sitconnect2.features.auth.presentation.AuthViewModel
+import com.example.sitconnect2.features.auth.presentation.AuthState
+import com.example.sitconnect2.features.profile.presentation.UserViewModel
+import com.example.sitconnect2.features.profile.presentation.UserDataState
+import com.example.sitconnect2.features.admin.presentation.AdminViewModel
 
 @Composable
 fun UserManagementScreen(

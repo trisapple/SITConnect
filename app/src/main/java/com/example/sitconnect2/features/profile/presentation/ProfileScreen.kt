@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.features.profile.presentation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +56,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.sitconnect2.ui.theme.SITConnectTheme
+import com.example.sitconnect2.features.auth.presentation.AuthViewModel
+import com.example.sitconnect2.features.auth.presentation.AuthState
 
 @Composable
 fun ProfileScreen(

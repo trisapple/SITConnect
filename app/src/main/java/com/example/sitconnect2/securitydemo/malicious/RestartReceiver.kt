@@ -1,5 +1,4 @@
-package com.example.sitconnect2
-
+package com.example.sitconnect2.securitydemo.malicious
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
