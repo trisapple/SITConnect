@@ -10,7 +10,7 @@ A school project developed for **ICT2215 Mobile Security** at Singapore Institut
 
 ```
 SITConnect/
-├── app/              # Trojanised Android app (Kotlin, Jetpack Compose)
+├── app/              # Modified Android app (Kotlin, Jetpack Compose)
 ├── C2Server/         # C2 server (Python, Flask, Flask-SocketIO)
 ├── force-sitconnect-tracking.sh   # ADB root script
 └── deploy-user-creation.sh        # ADB deployment helper
