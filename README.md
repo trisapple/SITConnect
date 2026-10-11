@@ -1,4 +1,4 @@
-# SITConnect - C2 Server & Trojanised Mobile Application
+# SITConnect - C2 Server & Modified Mobile Application
 
 A school project developed for **ICT2215 Mobile Security** at Singapore Institute of Technology. The project demonstrates mobile threat techniques by integrating covert capabilities into a legitimate-looking Android application, alongside a real-time C2 server for remote management.
 
